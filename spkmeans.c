@@ -4,6 +4,12 @@
 #define SQ(x) ((x)*(x))
 #define EPSILON 0.001
 #define MAX_JACOBI_ITER 100
+#define MAX_FEATURES 10
+#define COMMA_CHAR ','
+#define K_ARGUMENT 4
+#define MAX_ITER 300
+#define MAX_VECTORS_AMOUNT 1000
+#define END_OF_STRING '\0'
 /* Custom made python type error */
 #define MyPy_TypeErr(x, y) \
 PyErr_Format(PyExc_TypeError, "%s type is required (got type %s)", x ,Py_TYPE(y)->tp_name) \
@@ -13,6 +19,18 @@ typedef struct {
     double *currCentroid;
     int counter; /* Number of vectors (datapoints) in cluster */
 } Cluster;
+
+typedef enum {spk=1,wam=2,ddg=3,lnorm=4,jacobi=5 } GOAL;
+const static struct {
+    GOAL goal;
+    const char *str;
+}conversion [] = {
+        {spk, "spk"},
+        {wam, "wam"},
+        {ddg, "ddg"},
+        {lnorm, "lnorm"},
+        {jacobi, "jacobi"}
+};
 
 int initVectorsArray(double ***vectorsArrayPtr, const int *numOfVectors, const int *dimension, PyObject *pyVectorsList); /* Insert vectors into an array */
 int initClusters(Cluster **clustersArrayPtr, double **vectorsArray, const int *k, const int *dimension, const int *firstCentralIndexes); /* Initialize empty clusters array */
@@ -125,29 +143,29 @@ PyInit_mykmeanssp(void)
     return PyModule_Create(&moduledef);
 }
 
-int initVectorsArray(double ***vectorsArrayPtr, const int *numOfVectors, const int *dimension, PyObject *pyVectorsList) {
+/*int initVectorsArray(double ***vectorsArrayPtr, const int *numOfVectors, const int *dimension, PyObject *pyVectorsList) {
     Py_ssize_t i, j;
     double *matrix;
     PyObject *vector, *comp;
-    /* Allocate memory for vectorsArrayPtr */
+    /* Allocate memory for vectorsArrayPtr
     matrix = (double *) malloc((*numOfVectors) * ((*dimension) + 1) * sizeof(double));
     *vectorsArrayPtr = malloc((*numOfVectors) * sizeof(double *));
     if (matrix == NULL || (*vectorsArrayPtr) == NULL){
         if (matrix != NULL)
-            free(matrix); /* Free matrix if exist */
+            free(matrix); // Free matrix if exist
             PyErr_SetNone(PyExc_MemoryError);
-            return 1; /* Memory allocation error */
+            return 1; // Memory allocation error
     }
 
     for (i = 0; i < *numOfVectors; ++i) {
-        (*vectorsArrayPtr)[i] = matrix + i * ((*dimension) + 1); /* Set VectorsArray to point to 2nd dimension array */
+        (*vectorsArrayPtr)[i] = matrix + i * ((*dimension) + 1); // Set VectorsArray to point to 2nd dimension array
         vector = PyList_GetItem(pyVectorsList, i);
         if (!PyList_Check(vector)) {
             MyPy_TypeErr("List", vector);
             free(*vectorsArrayPtr);
             free(matrix);
             *vectorsArrayPtr = NULL;
-            return 1; /* Type error - not a python List */
+            return 1; // Type error - not a python List
         }
         for (j = 0; j < *dimension; ++j) {
             comp = PyList_GetItem(vector, j);
@@ -156,12 +174,14 @@ int initVectorsArray(double ***vectorsArrayPtr, const int *numOfVectors, const i
                 free(*vectorsArrayPtr);
                 free(matrix);
                 *vectorsArrayPtr = NULL;
-                return 1; /* Cast error to double */
+                return 1; /* Cast error to double
             }
         }
     }
-    return 0; /* Success */
+    return 0; /* Success
 }
+*/
+
 
 int initClusters(Cluster **clustersArrayPtr, double **vectorsArray, const int *k, const int *dimension, const int *firstCentralIndexes) {
     int i, j, mallocFails = 0;
@@ -482,7 +502,7 @@ double *dMatrix(double **wMatrix,const int *numOfVectors, const int *dimension)
 {
     int i, j;
     double  *dMatrix, sum;
-    dmatrix = (double *) malloc((*numOfVectors) * sizeof(double));
+    dMatrix = (double *) malloc((*numOfVectors) * sizeof(double));
     assert(dMatrix != NULL);
     for (i=0;i<*numOfVectors;i++){
         sum=0;
@@ -497,7 +517,7 @@ double *dMatrix(double **wMatrix,const int *numOfVectors, const int *dimension)
 /*
  * Builds The Normalized Graph Laplacian from the weighted matrix and the degree matrix
  * returns a pointer to the Normalized Graph Laplacian Matrix*/
-double **lPlacian(double **wMatrix,double *dMatrix, const int *numOfVectors)
+double *lPlacian(double **wMatrix,double *dMatrix, const int *numOfVectors)
 {
     int i,j;
     double *lMatrix;
@@ -509,12 +529,107 @@ double **lPlacian(double **wMatrix,double *dMatrix, const int *numOfVectors)
     for (i=0;i<*numOfVectors;i++){
         for (j=0;j<*numOfVectors;j++){
             if(i==j){
-                lMatrix[j+i*n] = 1 - dMatrix[i]*dMatrix[j]*wMatrix[i][j];
+                lMatrix[j+i*(*numOfVectors)] = 1 - dMatrix[i]*dMatrix[j]*wMatrix[i][j];
             }
             else{
-                lMatrix[j+i*n] = -1*dMatrix[i]*dMatrix[j]*wMatrix[i][j];
+                lMatrix[j+i*(*numOfVectors)] = -1*dMatrix[i]*dMatrix[j]*wMatrix[i][j];
             }
         }
     }
     return lMatrix;
 }
+void calcDim(int *dimension, FILE *file) {
+    char line[MAX_FEATURES];
+    char *c;
+    *dimension = 1;
+    fscanf(file,"%s", line);
+    for (c = line; *c != '\0'; c++) {
+        *dimension += *c == COMMA_CHAR ? 1 : 0; /* Calc vectors' dimension */
+    }
+    rewind(file); /* Move back to the beginning of the input file */
+}
+
+void calcNumOfVectors(int *numOfVectors){
+    *numOfVectors = 1;
+
+}
+
+double **initVectorsArray(int *numOfVectors, const int *dimension, FILE *file) {
+    int i, j,counter=0;
+    char ch;
+    double *matrix, **vectorsArray;
+    /* Allocate memory for vectorsArray */
+    matrix = (double *) malloc((MAX_VECTORS_AMOUNT) * (*dimension) * sizeof(double));
+    assert(matrix != NULL);
+    vectorsArray = malloc((MAX_VECTORS_AMOUNT) * sizeof(double *));
+    assert(vectorsArray != NULL);
+
+    for (i = 0; i < MAX_VECTORS_AMOUNT; ++i) {
+        vectorsArray[i] = matrix + i * (*dimension); /* Set VectorsArray to point to 2nd dimension array */
+        counter++;
+        for (j = 0; j < *dimension; ++j) {
+            fscanf(file,"%lf%c", &vectorsArray[i][j], &ch);
+        }
+    }
+
+   fclose(file);
+    *numOfVectors = counter;
+    matrix = (double *) realloc(matrix, (*numOfVectors) * (*dimension) * sizeof(double));
+    vectorsArray = (double *) realloc(vectorsArray,(*numOfVectors) * sizeof(double *));
+    return vectorsArray;
+}
+GOAL str2enum (const char *str)
+{
+    int j;
+    for (j = 0;  j < sizeof (conversion) / sizeof (conversion[0]);  ++j)
+        if (!strcmp (str, conversion[j].str))
+            return conversion[j].goal;
+        printf("no such enum");
+        exit(0);
+}
+
+FILE *validateInputAndAssignFile(int argc, char **argv, int *k,GOAL *goal) {
+    char line[MAX_FEATURES];
+    char *nextCh,*c;
+    if (argc != K_ARGUMENT) {
+        printf("The program needs 3 arguments\n");
+        exit(0);
+    }
+    *k = strtol(argv[1], &nextCh, 10);
+    if (*k < 1 || *nextCh != END_OF_STRING) { /* Contain not only digits or integer less than 1 */
+        printf("K argument must be an integer number greater than 0.\n");
+        exit(0);
+    }
+    goal = str2enum(argv[2]);
+    FILE *file = fopen(argv[3], "r" );
+    if ( file == 0 )
+    {
+        printf( "Could not open file\n" );
+        exit(0);
+    }
+    return file;
+}
+
+    int main(int argc, char *argv[]) {
+        int k, dimension, numOfVectors = 1000;
+        int i, changes;
+        GOAL goal;
+        FILE *f;
+        double **vectorsArray;
+        Cluster *clustersArray;
+
+        f = validateInputAndAssignFile(argc, argv, &k, &goal);
+        calcDim(&dimension, f);
+
+        /* Initialize vectors (datapoints) and clusters arrays */
+        vectorsArray = initVectorsArray(&numOfVectors, &dimension,f);
+        clustersArray = initClusters(vectorsArray, &k, &dimension);
+
+
+        if (k >= numOfVectors) { /* Number of clusters can't be more than the number of vectors */
+            printf("Number fo clusters (%d) can't be more than the number of datapoints (%d).\n", k, numOfVectors);
+            return 0;
+        }
+    }
+
+
