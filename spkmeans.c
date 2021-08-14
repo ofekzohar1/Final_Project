@@ -1,5 +1,4 @@
 #define PY_SSIZE_T_CLEAN
-
 #include <Python.h>
 
 #define SQ(x) ((x)*(x))
@@ -9,13 +8,9 @@
 #define COMMA_CHAR ','
 #define K_ARGUMENT 4
 #define MAX_ITER 300
-#define MAX_VECTORS_AMOUNT 1000
+#define MAX_DATAPOINTS 1000
 #define END_OF_STRING '\0'
 #define ERROR_MSG "An Error Has Occured\n"
-
-/* Custom made python type error */
-#define MyPy_TypeErr(x, y) \
-PyErr_Format(PyExc_TypeError, "%s type is required (got type %s)", x ,Py_TYPE(y)->tp_name) \
 
 #define MyAssert(exp) \
 if (!(exp)) {      \
@@ -43,47 +38,34 @@ const static struct {
         {jacobi, "jacobi"}
 };
 
-int initVectorsArray(double ***vectorsArrayPtr, const int *numOfVectors, const int *dimension,
-                     PyObject *pyVectorsList); /* Insert vectors into an array */
-Cluster *initClusters(double **vectorsArray, const int *k, const int *dimension,
-                      const int *firstCentralIndexes); /* Initialize empty clusters array */
-double
-vectorsNorm(const double *vec1, const double *vec2, const int *dimension); /* Calculate the norm between 2 vectors */
-int findMyCluster(double *vec, Cluster *clustersArray, const int *k,
-                  const int *dimension); /* Return the vector's closest cluster (in terms of norm) */
-void assignVectorsToClusters(double **vectorsArray, Cluster *clustersArray, const int *k, const int *numOfVectors,
-                             const int *dimension); /* For any vector assign to his closest cluster */
-int recalcCentroids(Cluster *clustersArray, const int *k,
-                    const int *dimension); /* Recalculate clusters' centroids, return number of changes */
-void initCurrCentroidAndCounter(Cluster *clustersArray, const int *k,
-                                const int *dimension); /* Set curr centroid to prev centroid and reset the counter */
-PyObject *
-buildPyListCentroids(Cluster *clustersArray, const int *k, const int *dimension); /* Print clusters' final centroids */
+double **fitClusteringToOriginData(int k, int dimension, int numOfVectors, double **vectorsArray, double **originData, Cluster *clustersArray);
+Cluster *kMeans(int k, int maxIter, int dimension, int numOfVectors, double **vectorsArray, int *firstCentralIndexes);
+int initVectorsArray(double ***vectorsArrayPtr, const int *numOfVectors, const int *dimension, PyObject *pyVectorsList); /* Insert vectors into an array */
+Cluster *initClusters(double **vectorsArray, const int *k, const int *dimension, const int *firstCentralIndexes); /* Initialize empty clusters array */
+double vectorsNorm(const double *vec1, const double *vec2, const int *dimension); /* Calculate the norm between 2 vectors */
+int findMyCluster(double *vec, Cluster *clustersArray, const int *k, const int *dimension); /* Return the vector's closest cluster (in terms of norm) */
+void assignVectorsToClusters(double **vectorsArray, Cluster *clustersArray, const int *k, const int *numOfVectors, const int *dimension); /* For any vector assign to his closest cluster */
+int recalcCentroids(Cluster *clustersArray, const int *k, const int *dimension); /* Recalculate clusters' centroids, return number of changes */
+void initCurrCentroidAndCounter(Cluster *clustersArray, const int *k, const int *dimension); /* Set curr centroid to prev centroid and reset the counter */
 void freeMemoryVectorsClusters(double **vectorsArray, double **originData, Cluster *clustersArray, int k); /* Free the allocated memory */
 void jacobiAlgorithm(double *matrix, double *eigenvectorsMat, int n);
-
 void initIdentityMatrix(double *matrix, int n);
-
 int EigengapHeuristicKCalc(double *a, int n);
 void **alloc2DArray(int rows, int cols, size_t basicSize);
 
-Cluster *kMeans(int k, int maxIter, int dimension, int numOfVectors, double **vectorsArray, int *firstCentralIndexes) {
-    int i, changes;
+/**********************************
+******** Spectral Clustering ******
+**********************************/
+
+double **dataClustering(int k, int maxIter, int dimension, int numOfVectors, double **vectorsArray, double **originData, int *firstCentralIndexes) {
     Cluster *clustersArray;
+    double **originDataCentroids;
 
-    /* Initialize clusters arrays */
-    clustersArray = initClusters(vectorsArray, &k, &dimension, firstCentralIndexes);
+    clustersArray = kMeans(k, maxIter, k, numOfVectors, vectorsArray, firstCentralIndexes);
+    originDataCentroids = fitClusteringToOriginData(k, dimension, numOfVectors, vectorsArray, originData, clustersArray);
 
-    for (i = 0; i < maxIter; ++i) {
-        initCurrCentroidAndCounter(clustersArray, &k,
-                                   &dimension); /* Update curr centroid to prev centroid and reset the counter */
-        assignVectorsToClusters(vectorsArray, clustersArray, &k, &numOfVectors, &dimension);
-        changes = recalcCentroids(clustersArray, &k, &dimension); /* Calculate new centroids */
-        if (changes == 0) { /* Centroids stay unchanged in the current iteration */
-            break;
-        }
-    }
-    return clustersArray;
+    freeMemoryVectorsClusters(vectorsArray, originData, clustersArray, k);
+    return originDataCentroids;
 }
 
 double **fitClusteringToOriginData(int k, int dimension, int numOfVectors, double **vectorsArray, double **originData, Cluster *clustersArray) {
@@ -117,17 +99,6 @@ double **fitClusteringToOriginData(int k, int dimension, int numOfVectors, doubl
     return originDataCentroids;
 }
 
-double **dataClustering(int k, int maxIter, int dimension, int numOfVectors, double **vectorsArray, double **originData, int *firstCentralIndexes) {
-    Cluster *clustersArray;
-    double **originDataCentroids;
-
-    clustersArray = kMeans(k, maxIter, k, numOfVectors, vectorsArray, firstCentralIndexes);
-    originDataCentroids = fitClusteringToOriginData(k, dimension, numOfVectors, vectorsArray, originData, clustersArray);
-
-    freeMemoryVectorsClusters(vectorsArray, originData, clustersArray, k);
-    return originDataCentroids;
-}
-
 void **alloc2DArray(int rows, int cols, size_t basicSize) {
     int i;
     void *blockMem, **matrix;
@@ -143,83 +114,31 @@ void **alloc2DArray(int rows, int cols, size_t basicSize) {
     return matrix;
 }
 
-/*
-* This actually defines the kMeans function using a wrapper C API function
-* The wrapping function needs a PyObject* self argument.
-* This is a requirement for all functions and methods in the C API.
-* It has input PyObject *args from Python.
-*/
-static PyObject *fit_connect(PyObject *self, PyObject *args) {
-    Py_ssize_t i;
-    PyObject * pyCentralsList, *pyVectorsList, *resault = NULL;
-    int k, maxIter, dimension, numOfVectors, *firstCentralIndexes;
-    double **vectorsArray = NULL; /* Default value - not allocated */
-    Cluster *clustersArray = NULL; /* Default value - not allocated */
-
-    if (!PyArg_ParseTuple(args, "iiiiOO", &k, &maxIter, &dimension, &numOfVectors, &pyCentralsList, &pyVectorsList))
-        return NULL; /* Type error - not in correct format */
-    if (!PyList_Check(pyCentralsList)) {
-        MyPy_TypeErr("List", pyCentralsList);
-        return NULL; /* Type error - not a python List */
-    }
-    if (!PyList_Check(pyVectorsList)) {
-        MyPy_TypeErr("List", pyVectorsList);
-        return NULL; /* Type error - not a python List */
-    }
-
-    firstCentralIndexes = (int *) malloc(k * sizeof(int));
-    if (firstCentralIndexes == NULL) {
-        resault = PyErr_NoMemory(); /* Memory allocation error */
-        goto end;
-    }
-    for (i = 0; i < k; i++) {
-        firstCentralIndexes[i] = (int) PyLong_AsLong(PyList_GetItem(pyCentralsList, i));
-        if (PyErr_Occurred()) {
-            goto end; /* Casting error to int */
+void freeMemoryVectorsClusters(double **vectorsArray, double **originData, Cluster *clustersArray, int k) {
+    int i;
+    /* Free clusters */
+    if (clustersArray != NULL) {
+        for (i = 0; i < k; ++i) {
+            free(clustersArray[i].currCentroid);
+            free(clustersArray[i].prevCentroid);
         }
     }
-    if (initVectorsArray(&vectorsArray, &numOfVectors, &dimension,
-                         pyVectorsList)) /* return 0 (false) on success, true on error */
-        goto end; /* On any error from initVectorsArray() */
-    resault = kMeans(k, maxIter, dimension, numOfVectors, vectorsArray, firstCentralIndexes, &clustersArray);
+    free(clustersArray);
 
-    end:
-    freeMemoryVectorsClusters(vectorsArray, clustersArray, &k, firstCentralIndexes); /* Free memory */
-    return resault;
+    /* Free vectors */
+    if (vectorsArray != NULL)
+        free(*vectorsArray);
+    free(vectorsArray);
+
+    /* Free original data */
+    if (originData != NULL)
+        free(*originData);
+    free(originData);
 }
 
-/*
- * This array tells Python what methods this module has.
- * We will use it in the next structure
- */
-static PyMethodDef _method[] = {
-        {"kMeans",                      /* the Python method name that will be used */
-                (PyCFunction) fit_connect, /* the C-function that implements the Python function and returns static PyObject*  */
-                METH_VARARGS,   /* flags indicating parametersaccepted for this function */
-                        NULL},      /*  The docstring for the function (PyDoc_STR("")) */
-        {NULL, NULL, 0, NULL}        /* The is a sentinel. Python looks for this entry to know that all
-                                       of the functions for the module have been defined. */
-};
-
-/* This initiates the module using the above definitions. */
-static struct PyModuleDef moduledef = {
-        PyModuleDef_HEAD_INIT,
-        "mykmeanssp", /* name of module */
-        NULL, /* module documentation, may be NULL */
-        -1,  /* size of per-interpreter state of the module, or -1 if the module keeps state in global variables. */
-        _method /* the PyMethodDef array from before containing the methods of the extension */
-};
-
-/*
- * The PyModuleDef structure, in turn, must be passed to the interpreter in the module’s initialization function.
- * The initialization function must be named PyInit_name(), where name is the name of the module and should match
- * what we wrote in struct PyModuleDef.
- * This should be the only non-static item defined in the module file
- */
-PyMODINIT_FUNC
-PyInit_mykmeanssp(void) {
-    return PyModule_Create(&moduledef);
-}
+/*************************************
+*********** kMeans Algorithm *********
+*************************************/
 
 /*int initVectorsArray(double ***vectorsArrayPtr, const int *numOfVectors, const int *dimension, PyObject *pyVectorsList) {
     Py_ssize_t i, j;
@@ -260,6 +179,23 @@ PyInit_mykmeanssp(void) {
 }
 */
 
+Cluster *kMeans(int k, int maxIter, int dimension, int numOfVectors, double **vectorsArray, int *firstCentralIndexes) {
+    int i, changes;
+    Cluster *clustersArray;
+
+    /* Initialize clusters arrays */
+    clustersArray = initClusters(vectorsArray, &k, &dimension, firstCentralIndexes);
+
+    for (i = 0; i < maxIter; ++i) {
+        initCurrCentroidAndCounter(clustersArray, &k, &dimension); /* Update curr centroid to prev centroid and reset the counter */
+        assignVectorsToClusters(vectorsArray, clustersArray, &k, &numOfVectors, &dimension);
+        changes = recalcCentroids(clustersArray, &k, &dimension); /* Calculate new centroids */
+        if (changes == 0) { /* Centroids stay unchanged in the current iteration */
+            break;
+        }
+    }
+    return clustersArray;
+}
 
 Cluster *initClusters(double **vectorsArray, const int *k, const int *dimension, const int *firstCentralIndexes) {
     int i, j;
@@ -339,7 +275,7 @@ int recalcCentroids(Cluster *clustersArray, const int *k, const int *dimension) 
         for (j = 0; j < *dimension; ++j) {
             cluster.currCentroid[j] /= cluster.counter; /* Calc the mean value */
             changes += cluster.prevCentroid[j] != cluster.currCentroid[j] ? 1
-                                                                          : 0; /* Count the number of changed centroids' components */
+                    : 0; /* Count the number of changed centroids' components */
         }
     }
     return changes;
@@ -354,58 +290,6 @@ void initCurrCentroidAndCounter(Cluster *clustersArray, const int *k, const int 
         }
         clustersArray[i].counter = 0; /* Reset counter */
     }
-}
-
-PyObject *buildPyListCentroids(Cluster *clustersArray, const int *k, const int *dimension) {
-    Py_ssize_t i, j;
-    PyObject * listOfCentrals, *central, *comp;
-    listOfCentrals = PyList_New(*k);
-    if (listOfCentrals != NULL) { /* If NULL alloc fail */
-        for (i = 0; i < *k; ++i) {
-            central = PyList_New(*dimension);
-            if (central == NULL) {
-                Py_DecRef(listOfCentrals);
-                return NULL; /* If NULL alloc fail */
-            }
-            for (j = 0; j < *dimension; ++j) {
-                comp = PyFloat_FromDouble(clustersArray[i].currCentroid[j]);
-                if (comp == NULL || PyList_SetItem(central, j, comp)) {
-                    Py_DecRef(listOfCentrals);
-                    Py_DecRef(central);
-                    Py_XDECREF(comp);
-                    return NULL; /* Set error */
-                }
-            }
-            if (PyList_SetItem(listOfCentrals, i, central)) {
-                Py_DecRef(listOfCentrals);
-                Py_DecRef(central);
-                return NULL; /* Set error */
-            }
-        }
-    }
-    return listOfCentrals;
-}
-
-void freeMemoryVectorsClusters(double **vectorsArray, double **originData, Cluster *clustersArray, int k) {
-    int i;
-    /* Free clusters */
-    if (clustersArray != NULL) {
-        for (i = 0; i < k; ++i) {
-            free(clustersArray[i].currCentroid);
-            free(clustersArray[i].prevCentroid);
-        }
-    }
-    free(clustersArray);
-
-    /* Free vectors */
-    if (vectorsArray != NULL)
-        free(*vectorsArray);
-    free(vectorsArray);
-
-    /* Free original data */
-    if (originData != NULL)
-        free(*originData);
-    free(originData);
 }
 
 /*************************************
@@ -625,45 +509,45 @@ double *lPlacian(double **wMatrix, double *dMatrix, const int *numOfVectors) {
     return lMatrix;
 }
 
-void calcDim(int *dimension, FILE *file) {
-    char line[MAX_FEATURES];
-    char *c;
-    *dimension = 1;
-    fscanf(file, "%s", line);
-    for (c = line; *c != '\0'; c++) {
-        *dimension += *c == COMMA_CHAR ? 1 : 0; /* Calc vectors' dimension */
-    }
-    rewind(file); /* Move back to the beginning of the input file */
+void calcDim(int *dimension, FILE *file, double *firstLine) {
+    char c;
+    double value;
+    *dimension = 0;
+    do {
+        fscanf(file, "%lf%c", &value, &c);
+        firstLine[(*dimension)++] = value;
+    } while (c != '\n');
 }
 
-void calcNumOfVectors(int *numOfVectors) {
-    *numOfVectors = 1;
+double **readDataFromFile(int *rows, int *cols, char *fileName) {
+    int counter, j;
+    char c;
+    double value;
+    double **matrix, *dataBlock = (double *) malloc(MAX_FEATURES * sizeof(double));
+    MyAssert(dataBlock != NULL);
+    FILE *file = fopen(fileName, "r");
+    MyAssert(file != NULL);
+    calcDim(cols, file, dataBlock);
 
-}
+    /* Reallocate memory to hold the data */
+    dataBlock = (double *) malloc(MAX_DATAPOINTS * (*cols) * sizeof(double));
+    MyAssert(dataBlock != NULL);
 
-double **initVectorsArray(int *numOfVectors, const int *dimension, FILE *file) {
-    int i, j, counter = 0;
-    char ch;
-    double *matrix, **vectorsArray;
-    /* Allocate memory for vectorsArray */
-    matrix = (double *) malloc((MAX_VECTORS_AMOUNT) * (*dimension) * sizeof(double));
-    assert(matrix != NULL);
-    vectorsArray = malloc((MAX_VECTORS_AMOUNT) * sizeof(double *));
-    assert(vectorsArray != NULL);
-
-    for (i = 0; i < MAX_VECTORS_AMOUNT; ++i) {
-        vectorsArray[i] = matrix + i * (*dimension); /* Set VectorsArray to point to 2nd dimension array */
-        counter++;
-        for (j = 0; j < *dimension; ++j) {
-            fscanf(file, "%lf%c", &vectorsArray[i][j], &ch);
-        }
+    counter = *cols;
+    while (fscanf(file, "%lf%c", &value, &c) != EOF) {
+        dataBlock[counter++] = value;
     }
+    MyAssert(fclose(file) != EOF);
 
-    fclose(file);
-    *numOfVectors = counter;
-    matrix = (double *) realloc(matrix, (*numOfVectors) * (*dimension) * sizeof(double));
-    vectorsArray = (double *) realloc(vectorsArray, (*numOfVectors) * sizeof(double *));
-    return vectorsArray;
+    *rows = counter / *cols;
+    dataBlock = (double *) realloc(dataBlock, counter * sizeof(double));
+    MyAssert(dataBlock != NULL);
+    matrix = (double **) malloc((*rows) * sizeof(double *));
+    MyAssert(matrix != NULL);
+    for(j = 0; j < *rows; ++j) {
+        matrix[j] = dataBlock + (j * (*cols));
+    }
+    return matrix;
 }
 
 GOAL str2enum(const char *str) {
@@ -697,10 +581,8 @@ FILE *validateInputAndAssignFile(int argc, char **argv, int *k, GOAL *goal) {
 }
 
 int main(int argc, char *argv[]) {
-    int k, dimension, numOfVectors = 1000;
-    int i, changes;
+    int i, k, dimension, numOfDatapoints;
     GOAL goal;
-    FILE *f;
     double **vectorsArray;
     Cluster *clustersArray;
 
@@ -708,12 +590,12 @@ int main(int argc, char *argv[]) {
     calcDim(&dimension, f);
 
     /* Initialize vectors (datapoints) and clusters arrays */
-    vectorsArray = initVectorsArray(&numOfVectors, &dimension, f);
+    vectorsArray = initVectorsArray(&numOfDatapoints, &dimension, f);
     clustersArray = initClusters(vectorsArray, &k, &dimension);
 
 
-    if (k >= numOfVectors) { /* Number of clusters can't be more than the number of vectors */
-        printf("Number fo clusters (%d) can't be more than the number of datapoints (%d).\n", k, numOfVectors);
+    if (k >= numOfDatapoints) { /* Number of clusters can't be more than the number of vectors */
+        printf("Number fo clusters (%d) can't be more than the number of datapoints (%d).\n", k, numOfDatapoints);
         return 0;
     }
 }
