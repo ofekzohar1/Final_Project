@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include "spkmeans.h"
 
-# define N 4
+# define N 5
 
 void r8vec_print(int n, double a[], char *title);
 void r8mat_print_some(int m, int n, double a[], int ilo, int jlo, int ihi, int jhi, char *title);
@@ -10,10 +10,11 @@ void r8mat_print(int m, int n, double a[], char *title);
 int main() {
     int i;
     double a[N * N] = {
-            4.0, -30.0, 60.0, -35.0,
-            -30.0, 300.0, -675.0, 420.0,
-            60.0, -675.0, 1620.0, -1050.0,
-            -35.0, 420.0, -1050.0, 700.0};
+            0.1255,0.344,0.4794,0.3166,-0.1119
+            ,0.344,0.4419,-0.4699,0.1958,0.3605
+            ,0.4794,-0.4699,-0.3324,-0.0248,0.2079
+            ,0.3166,0.1958,-0.0248,0.0681,0.1336
+            ,-0.1119,0.3605,0.2079,0.1336,0.0439};
     int n = N;
     double d[N];
     double v[N * N] = {{0}};
@@ -36,7 +37,7 @@ int main() {
 
     r8mat_print(n, n, v, "  Eigenvector matrix V:");
 
-    printf("%d", EigengapHeuristicKCalc (a, n));
+    printf("%d", eigengapHeuristicKCalc(a, n));
 }
 
 void r8vec_print(int n, double a[], char *title) {
@@ -46,7 +47,7 @@ void r8vec_print(int n, double a[], char *title) {
     fprintf(stdout, "%s\n", title);
     fprintf(stdout, "\n");
     for (i = 0; i < n; i++) {
-        fprintf(stdout, "  %8d: %14f\n", i, a[i]);
+        fprintf(stdout, "  %8d: %.4f\n", i, a[i]);
     }
 }
 
@@ -118,7 +119,7 @@ void r8mat_print_some(int m, int n, double a[], int ilo, int jlo, int ihi, int j
             */
             fprintf(stdout, "%5d:", i - 1);
             for (j = j2lo; j <= j2hi; j++) {
-                fprintf(stdout, "  %14f", a[j - 1 + (i - 1) * m]);
+                fprintf(stdout, "  %.4f", a[i - 1 + (j - 1) * m]);
             }
             fprintf(stdout, "\n");
         }
