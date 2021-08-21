@@ -99,15 +99,24 @@ int main(int argc, char *argv[]) {
 
     wMat = (double **) alloc2DArray(numOfDatapoints, numOfDatapoints, sizeof(double), sizeof(double *), NULL);
     weightedMatrix(wMat, datapointsArray, numOfDatapoints, dimension);
-    // printMatrix(wMat, numOfDatapoints, numOfDatapoints);
+    if (goal==wam){
+        printMatrix(wMat, numOfDatapoints, numOfDatapoints);
+        exit(0);
+    }
 
     ddgMat = dMatrix(wMat, numOfDatapoints);
-    // printMatrix(&ddgMat, 1, numOfDatapoints);
+    if (goal==ddg){
+        printMatrix(&ddgMat, 1, numOfDatapoints);
+        exit(0);
+    }
 
     lnormMat = laplacian(wMat, ddgMat, numOfDatapoints);
     free(ddgMat); /* End of need */
-    //printMatrix(lnormMat, numOfDatapoints, numOfDatapoints);
-    // printf("\n");
+    if(goal==lnorm){
+        printMatrix(lnormMat, numOfDatapoints, numOfDatapoints);
+        printf("\n");
+        exit(0);
+    }
 
     eigenvectorsMat = (double *) malloc(numOfDatapoints * numOfDatapoints * sizeof(double));
     jacobiAlgorithm(*lnormMat, eigenvectorsMat, numOfDatapoints);
@@ -116,6 +125,18 @@ int main(int argc, char *argv[]) {
     // printf("\n");
     // printMatrix(&eigenvectorsMat, 1, numOfDatapoints * numOfDatapoints);
     eigenvalues = sortEigenvalues(*lnormMat, eigenvectorsMat, numOfDatapoints);
+    if(goal==jacobi){
+        printMatrix(&eigenvectorsMat, 1, numOfDatapoints * numOfDatapoints);
+        printf("eigenvalues: ");//maybe erase
+        for(i=0;i<numOfDatapoints;i++)
+        {
+            if(i>0)
+                printf("%c", COMMA_CHAR);
+            printf("%.4f", eigenvalues[i]);
+        }
+        exit(0);
+    }
+
     if (k == 0)
         k = eigengapHeuristicKCalc(eigenvalues, numOfDatapoints);
     tMat = initTMatrix(eigenvalues, *lnormMat, numOfDatapoints, k);
