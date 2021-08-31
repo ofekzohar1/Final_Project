@@ -25,11 +25,11 @@ exit(EXIT_FAILURE);     \
 }
 
 #define FOREACH_GOAL(GOAL) \
-GOAL(spk)   \
+GOAL(jacobi) \
 GOAL(wam)  \
 GOAL(ddg)   \
 GOAL(lnorm)  \
-GOAL(jacobi)
+GOAL(spk)
 
 #define GENERATE_ENUM(ENUM) ENUM,
 #define GENERATE_STRING(STRING) #STRING,
@@ -66,12 +66,13 @@ void jacobiAlgorithm(double *matrix, double *eigenvectorsMat, int n);
 void initIdentityMatrix(double *matrix, int n);
 int eigengapHeuristicKCalc(Eigenvalue *eigenvalues, int n);
 void **alloc2DArray(int rows, int cols, size_t basicSize, size_t basicPtrSize, void *freeUsedSpace);
+void *myAlloc(void *usedMem, int len, size_t basicSize);
 void merge(Eigenvalue arr[], int l, int m, int r);
 void mergeSort(Eigenvalue arr[], int l, int r);
 void printFinalCentroids(Cluster *clustersArray, int k, int dimension);
 void printMatrix(double **matrix, int rows, int cols);
 void validateAndAssignInput(int argc, char **argv, int *k, GOAL *goal, char **filenamePtr);
-double **readDataFromFile(int *rows, int *cols, char *fileName);
+double **readDataFromFile(int *rows, int *cols, char *fileName, GOAL goal);
 void weightedMatrix(double **wMatrix, double **vectorsArray, int numOfVectors, int dimension);
 double *dMatrix(double **wMatrix, int dim);
 double **laplacian(double **wMatrix, double *dMatrix, int numOfVectors);
@@ -79,6 +80,8 @@ void calcDim(int *dimension, FILE *file, double *firstLine);
 double **initTMatrix(Eigenvalue *eigenvalues, double *freeUsedMem, int n, int k);
 Eigenvalue *sortEigenvalues(double *a, double *v, int n);
 void printTest(double **a, double*v, int n);
+
+//TODO printing jacobi eigenvectors as rows
 
 /**********************************
 *********** Main ******************
@@ -94,8 +97,7 @@ int main(int argc, char *argv[]) {
     int firstIndex[] = {44,46,68,64};
 
     validateAndAssignInput(argc, argv, &k, &goal, &filename);
-    datapointsArray = readDataFromFile(&numOfDatapoints, &dimension, filename);
-    // printMatrix(datapointsArray, numOfDatapoints, dimension);
+    datapointsArray = readDataFromFile(&numOfDatapoints, &dimension, filename, goal);
 
     wMat = (double **) alloc2DArray(numOfDatapoints, numOfDatapoints, sizeof(double), sizeof(double *), NULL);
     weightedMatrix(wMat, datapointsArray, numOfDatapoints, dimension);
@@ -132,7 +134,7 @@ int main(int argc, char *argv[]) {
         {
             if(i>0)
                 printf("%c", COMMA_CHAR);
-            printf("%.4f", eigenvalues[i]);
+            printf("%.4f", eigenvalues[i].value);
         }
         exit(0);
     }
@@ -221,15 +223,19 @@ void **alloc2DArray(int rows, int cols, size_t basicSize, size_t basicPtrSize, v
     int i;
     void *blockMem, **matrix;
     /* Reallocate block of memory */
-    blockMem = realloc(freeUsedSpace ,rows * cols * basicSize);
-    MyAssert(blockMem != NULL);
-    matrix = malloc(rows * basicPtrSize);
-    MyAssert(matrix);
+    blockMem = myAlloc(freeUsedSpace ,rows * cols, basicSize);
+    matrix = myAlloc(NULL, rows, basicPtrSize);
 
     for (i = 0; i < rows; ++i) {
         matrix[i] = blockMem + i * cols * basicSize; /* Set matrix to point to 2nd dimension array */
     }
     return matrix;
+}
+
+void *myAlloc(void *usedMem, int len, size_t basicSize) {
+    void *blockMem = realloc(usedMem, len * basicSize);
+    MyAssert(blockMem != NULL);
+    return blockMem;
 }
 
 void freeMemoryVectorsClusters(double **vectorsArray, double **originData, Cluster *clustersArray, int k) {
@@ -261,7 +267,7 @@ void printMatrix(double **matrix, int rows, int cols) {
         for (j = 0; j < cols; ++j) {
             if (j > 0)
                 printf("%c", COMMA_CHAR);
-            printf("%.2e", matrix[i][j]); /* Print with an accuracy of 4 digits after the dot */
+            printf("%.3f", matrix[i][j]); /* Print with an accuracy of 4 digits after the dot */
         }
         printf("\n");
     }
@@ -663,20 +669,22 @@ void calcDim(int *dimension, FILE *file, double *firstLine) {
     } while (c != '\n');
 }
 
-double **readDataFromFile(int *rows, int *cols, char *fileName) {
-    int counter, j;
+double **readDataFromFile(int *rows, int *cols, char *fileName, GOAL goal) {
+    int counter, maxLen;
     char c;
     double value;
     FILE *file;
-    double **matrix, *dataBlock = (double *) malloc(MAX_FEATURES * sizeof(double));
-    MyAssert(dataBlock != NULL);
+    double **matrix, *dataBlock;
+
+    maxLen = goal != jacobi ? MAX_FEATURES : MAX_DATAPOINTS;
+    dataBlock = (double *) myAlloc(NULL, maxLen, sizeof(double));
     file = fopen(fileName, "r");
     MyAssert(file != NULL);
     calcDim(cols, file, dataBlock);
 
+    maxLen = goal != jacobi ? MAX_DATAPOINTS : *cols;
     /* Reallocate memory to hold the data */
-    dataBlock = (double *) realloc(dataBlock ,MAX_DATAPOINTS * (*cols) * sizeof(double));
-    MyAssert(dataBlock != NULL);
+    dataBlock = (double *) myAlloc(dataBlock ,maxLen * (*cols), sizeof(double));
 
     counter = *cols;
     while (fscanf(file, "%lf%c", &value, &c) != EOF) {
