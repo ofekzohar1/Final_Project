@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <math.h>
 #include <string.h>
+#include <assert.h>
 
 #define SQ(x) ((x)*(x))
 #define EPSILON 1.0E-15
@@ -14,13 +15,14 @@
 #define MAX_KMEANS_ITER 300
 #define MAX_DATAPOINTS 50
 #define END_OF_STRING '\0'
-#define PRINT_FORMAT "%0.3f"
+#define PRINT_FORMAT "%.4f"
 #define ERROR_MSG "An Error Has Occurred\n"
 #define INVALID_INPUT_MSG "Invalid Input!\n"
 
 #define MyAssert(exp) \
 if (!(exp)) {      \
-fprintf(stderr, ERROR_MSG);                        \
+fprintf(stderr, ERROR_MSG); \
+assert (exp);   \
 exit(EXIT_FAILURE);     \
 }
 
@@ -93,7 +95,7 @@ int main(int argc, char *argv[]) {
     double **datapointsArray, **tMat, **wMat, **lnormMat, **eigenvectorsMat, *ddgMat, **freeUsedMem;
     Eigenvalue *eigenvalues;
     Cluster *clustersArray = NULL;
-    // int firstIndex[] = {44,46,68,64};
+    /* int firstIndex[] = {44,46,68,64}; */
 
     validateAndAssignInput(argc, argv, &k, &goal, &filename);
     datapointsArray = readDataFromFile(&numOfDatapoints, &dimension, filename, goal);
@@ -442,7 +444,7 @@ double jacobiRotate(double **a, double **v, int n, int i, int j) {
     double ij, ii, jj, ir, jr;
     int r;
 
-    theta = a[j][j] - a[i][i]; // Ajj - Aii
+    theta = a[j][j] - a[i][i];
     theta /= (2 * a[i][j]);
     t = 1.0 / (fabs(theta) + sqrt(SQ(theta) + 1.0));
     t = theta < 0.0 ? -t : t;
@@ -452,16 +454,16 @@ double jacobiRotate(double **a, double **v, int n, int i, int j) {
     ii = a[i][i];
     jj = a[j][j];
     ij = a[i][j];
-    a[i][j] = 0.0; // Aij = 0
+    a[i][j] = 0.0;
     a[j][i] = 0.0;
     for (r = 0; r < n; r++) {
         if (r == i)
-            // c^2 * Aii + s^2 * Ajj - 2scAij
+            /* c^2 * Aii + s^2 * Ajj - 2scAij */
             a[i][i] = SQ(c) * ii + SQ(s) * jj - 2 * s * c * ij;
         else if (r == j)
-            // s^2 * Aii + c^2 * Ajj + 2scAij
+            /* s^2 * Aii + c^2 * Ajj + 2scAij */
             a[j][j] = SQ(s) * ii + SQ(c) * jj + 2 * s * c * ij;
-        else { // r != j, i
+        else { /* r != j, i */
             ir = a[i][r];
             jr = a[j][r];
             a[i][r] = c * ir - s * jr;
@@ -471,14 +473,14 @@ double jacobiRotate(double **a, double **v, int n, int i, int j) {
 
         }
 
-        // Update the eigenvector matrix
+        /* Update the eigenvector matrix */
         ir = v[i][r];
         jr = v[j][r];
         v[i][r] = c * ir - s * jr;
         v[j][r] = c * jr + s * ir;
     }
 
-    return 2 * SQ(ij); // offNormDiff: Off(A)^2 - Off(A')^2 = 2 * Aij^2
+    return 2 * SQ(ij); /* offNormDiff: Off(A)^2 - Off(A')^2 = 2 * Aij^2 */
 }
 
 Eigenvalue *sortEigenvalues(double **a, double **v, int n) {
@@ -537,7 +539,7 @@ double **initTMatrix(Eigenvalue *eigenvalues, double **eigenvectorsMat, double *
             tMat[i][j] = value;
             sumSqRow += SQ(value);
         }
-        if (sumSqRow != 0.0) { // TODO check about zero line
+        if (sumSqRow != 0.0) { /* TODO check about zero line */
             sumSqRow = 1.0 / sqrt(sumSqRow);
             for (j = 0; j < k; ++j) {
                 tMat[i][j] *= sumSqRow;
@@ -673,9 +675,9 @@ void validateAndAssignInput(int argc, char **argv, int *k, GOAL *goal, char **fi
  **** Merge Sort *********
  ************************/
 
-// Merge two Sub-arrays of arr[].
-// First subarray is arr[l...m]
-// Second subarray is arr[m+1..r]
+/* Merge two Sub-arrays of arr[].
+ First subarray is arr[l...m]
+ Second subarray is arr[m+1..r] */
 void merge(Eigenvalue arr[], int l, int m, int r)
 {
     int i, j, k;
@@ -692,9 +694,9 @@ void merge(Eigenvalue arr[], int l, int m, int r)
         R[j] = arr[m + 1 + j];
 
     /* Merge the temp arrays back into arr[l...r]*/
-    i = 0; // Initial index of first subarray
-    j = 0; // Initial index of second subarray
-    k = l; // Initial index of merged subarray
+    i = 0; /* Initial index of first subarray */
+    j = 0; /* Initial index of second subarray */
+    k = l; /* Initial index of merged subarray */
     while (i < n1 && j < n2) {
         if (L[i].value <= R[j].value) {
             arr[k] = L[i];
@@ -729,11 +731,11 @@ sub-array of arr to be sorted */
 void mergeSort(Eigenvalue arr[], int l, int r)
 {
     if (l < r) {
-        // Same as (l+r)/2, but avoids overflow for
-        // large l and h
+        /* Same as (l+r)/2, but avoids overflow for */
+        /* large l and h */
         int m = l + (r - l) / 2;
 
-        // Sort first and second halves
+        /* Sort first and second halves */
         mergeSort(arr, l, m);
         mergeSort(arr, m + 1, r);
 
