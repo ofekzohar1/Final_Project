@@ -2,7 +2,6 @@
 #include <stdlib.h>
 #include <math.h>
 #include <string.h>
-#include <assert.h>
 
 #define SQ(x) ((x)*(x))
 #define EPSILON 1.0E-15
@@ -15,6 +14,7 @@
 #define MAX_KMEANS_ITER 300
 #define MAX_DATAPOINTS 50
 #define END_OF_STRING '\0'
+#define PRINT_FORMAT "%0.3f"
 #define ERROR_MSG "An Error Has Occurred\n"
 #define INVALID_INPUT_MSG "Invalid Input!\n"
 
@@ -54,16 +54,15 @@ typedef struct {
 
 double **fitClusteringToOriginData(int k, int dimension, int numOfVectors, double **vectorsArray, double **originData, Cluster *clustersArray);
 Cluster *kMeans(int k, int maxIter, int dimension, int numOfVectors, double **vectorsArray, int *firstCentralIndexes);
-/* int initVectorsArray(double ***vectorsArrayPtr, const int *numOfVectors, const int *dimension, PyObject *pyVectorsList); Insert vectors into an array */
-Cluster *initClusters(double **vectorsArray, const int *k, const int *dimension, int *firstCentralIndexes); /* Initialize empty clusters array */
+Cluster *initClusters(double **vectorsArray, int k, int dimension, int *firstCentralIndexes);
 double vectorsNorm(const double *vec1, const double *vec2, const int *dimension); /* Calculate the norm between 2 vectors */
 int findMyCluster(double *vec, Cluster *clustersArray, const int *k, const int *dimension); /* Return the vector's closest cluster (in terms of norm) */
 void assignVectorsToClusters(double **vectorsArray, Cluster *clustersArray, const int *k, const int *numOfVectors, const int *dimension); /* For any vector assign to his closest cluster */
 int recalcCentroids(Cluster *clustersArray, const int *k, const int *dimension); /* Recalculate clusters' centroids, return number of changes */
 void initCurrCentroidAndCounter(Cluster *clustersArray, const int *k, const int *dimension); /* Set curr centroid to prev centroid and reset the counter */
 void freeMemoryVectorsClusters(double **vectorsArray, double **originData, Cluster *clustersArray, int k); /* Free the allocated memory */
-void jacobiAlgorithm(double *matrix, double *eigenvectorsMat, int n);
-void initIdentityMatrix(double *matrix, int n);
+void jacobiAlgorithm(double **matrix, double **eigenvectorsMat, int n);
+void initIdentityMatrix(double **matrix, int n);
 int eigengapHeuristicKCalc(Eigenvalue *eigenvalues, int n);
 void **alloc2DArray(int rows, int cols, size_t basicSize, size_t basicPtrSize, void *freeUsedSpace);
 void *myAlloc(void *usedMem, int len, size_t basicSize);
@@ -73,85 +72,87 @@ void printFinalCentroids(Cluster *clustersArray, int k, int dimension);
 void printMatrix(double **matrix, int rows, int cols);
 void validateAndAssignInput(int argc, char **argv, int *k, GOAL *goal, char **filenamePtr);
 double **readDataFromFile(int *rows, int *cols, char *fileName, GOAL goal);
-void weightedMatrix(double **wMatrix, double **vectorsArray, int numOfVectors, int dimension);
+double **weightedMatrix(double **wMatrix, double **vectorsArray, int numOfVectors, int dimension);
 double *dMatrix(double **wMatrix, int dim);
 double **laplacian(double **wMatrix, double *dMatrix, int numOfVectors);
 void calcDim(int *dimension, FILE *file, double *firstLine);
-double **initTMatrix(Eigenvalue *eigenvalues, double *freeUsedMem, int n, int k);
-Eigenvalue *sortEigenvalues(double *a, double *v, int n);
+double **initTMatrix(Eigenvalue *eigenvalues, double **eigenvectorsMat, double **tMat, int n, int k);
+Eigenvalue *sortEigenvalues(double **a, double **v, int n);
 void printTest(double **a, double*v, int n);
-
-//TODO printing jacobi eigenvectors as rows
+void pivotIndex(double **matrix, int n, int *pivotRow, int *pivotCol);
+void printJacobi(double **a, double **v, int n);
 
 /**********************************
 *********** Main ******************
 **********************************/
 
 int main(int argc, char *argv[]) {
-    int i, k, dimension, numOfDatapoints;
+    int k, dimension, numOfDatapoints;
     GOAL goal;
     char *filename;
-    double **datapointsArray, **tMat, **wMat, **lnormMat, *eigenvectorsMat, *ddgMat;
+    double **datapointsArray, **tMat, **wMat, **lnormMat, **eigenvectorsMat, *ddgMat, **freeUsedMem;
     Eigenvalue *eigenvalues;
-    Cluster *clustersArray;
-    int firstIndex[] = {44,46,68,64};
+    Cluster *clustersArray = NULL;
+    // int firstIndex[] = {44,46,68,64};
 
     validateAndAssignInput(argc, argv, &k, &goal, &filename);
     datapointsArray = readDataFromFile(&numOfDatapoints, &dimension, filename, goal);
 
-    wMat = (double **) alloc2DArray(numOfDatapoints, numOfDatapoints, sizeof(double), sizeof(double *), NULL);
-    weightedMatrix(wMat, datapointsArray, numOfDatapoints, dimension);
+    freeUsedMem = (double **) alloc2DArray(numOfDatapoints, numOfDatapoints, sizeof(double), sizeof(double *), NULL);
+    if (goal == jacobi) {
+        eigenvectorsMat = freeUsedMem;
+        jacobiAlgorithm(datapointsArray, eigenvectorsMat, numOfDatapoints);
+        printJacobi(datapointsArray, eigenvectorsMat, numOfDatapoints);
+        goto end;
+    }
+
+    wMat = weightedMatrix(freeUsedMem, datapointsArray, numOfDatapoints, dimension);
     if (goal==wam){
         printMatrix(wMat, numOfDatapoints, numOfDatapoints);
-        exit(0);
+        goto end;
     }
 
     ddgMat = dMatrix(wMat, numOfDatapoints);
     if (goal==ddg){
         printMatrix(&ddgMat, 1, numOfDatapoints);
-        exit(0);
+        free(ddgMat);
+        goto end;
     }
 
     lnormMat = laplacian(wMat, ddgMat, numOfDatapoints);
-    free(ddgMat); /* End of need */
     if(goal==lnorm){
         printMatrix(lnormMat, numOfDatapoints, numOfDatapoints);
-        printf("\n");
-        exit(0);
+        goto end;
     }
 
-    eigenvectorsMat = (double *) malloc(numOfDatapoints * numOfDatapoints * sizeof(double));
-    jacobiAlgorithm(*lnormMat, eigenvectorsMat, numOfDatapoints);
-    // printTest(lnormMat, eigenvectorsMat, numOfDatapoints);
-    // printMatrix(lnormMat, numOfDatapoints, numOfDatapoints);
-    // printf("\n");
-    // printMatrix(&eigenvectorsMat, 1, numOfDatapoints * numOfDatapoints);
-    eigenvalues = sortEigenvalues(*lnormMat, eigenvectorsMat, numOfDatapoints);
-    if(goal==jacobi){
-        printMatrix(&eigenvectorsMat, 1, numOfDatapoints * numOfDatapoints);
-        printf("eigenvalues: ");//maybe erase
-        for(i=0;i<numOfDatapoints;i++)
-        {
-            if(i>0)
-                printf("%c", COMMA_CHAR);
-            printf("%.4f", eigenvalues[i].value);
-        }
-        exit(0);
-    }
+    eigenvectorsMat = (double **) alloc2DArray(numOfDatapoints, numOfDatapoints, sizeof(double), sizeof(double *), NULL);
+    jacobiAlgorithm(lnormMat, eigenvectorsMat, numOfDatapoints);
+    eigenvalues = sortEigenvalues(lnormMat, eigenvectorsMat, numOfDatapoints);
+    freeUsedMem = lnormMat;
 
     if (k == 0)
         k = eigengapHeuristicKCalc(eigenvalues, numOfDatapoints);
-    tMat = initTMatrix(eigenvalues, *lnormMat, numOfDatapoints, k);
-    // printMatrix(tMat, numOfDatapoints, k);
-    /* Free memory */
-    free(lnormMat);
-    free(eigenvectorsMat);
+    tMat = initTMatrix(eigenvalues, eigenvectorsMat, freeUsedMem, numOfDatapoints, k);
 
-    clustersArray = kMeans(k, MAX_KMEANS_ITER, k, numOfDatapoints, tMat, firstIndex);
+    clustersArray = kMeans(k, MAX_KMEANS_ITER, k, numOfDatapoints, tMat, NULL);
     printFinalCentroids(clustersArray, k, k);
-    freeMemoryVectorsClusters(tMat, datapointsArray, clustersArray, k);
+    freeUsedMem = tMat;
 
+    end:
+    freeMemoryVectorsClusters(freeUsedMem, datapointsArray, clustersArray, k);
     return 0;
+}
+
+void printJacobi(double **a, double **v, int n) {
+    int i;
+    
+    for (i = 0; i < n; ++i) {
+        if (i != 0)
+            printf("%c", COMMA_CHAR);
+        printf(PRINT_FORMAT, a[i][i]);
+    }
+    printf("\n");
+    printMatrix(v, n, n);
 }
 
 void printTest(double **a, double*v, int n) {
@@ -166,7 +167,7 @@ void printTest(double **a, double*v, int n) {
         for (j = 0; j < n; ++j) {
             if (j > 0)
                 fprintf(file, "%c", COMMA_CHAR);
-            fprintf(file, "%.4f", v[j + i * n]);
+            fprintf(file, PRINT_FORMAT, v[j + i * n]);
         }
         fprintf(file, "\n");
     }
@@ -267,7 +268,7 @@ void printMatrix(double **matrix, int rows, int cols) {
         for (j = 0; j < cols; ++j) {
             if (j > 0)
                 printf("%c", COMMA_CHAR);
-            printf("%.3f", matrix[i][j]); /* Print with an accuracy of 4 digits after the dot */
+            printf(PRINT_FORMAT, matrix[i][j]); /* Print with an accuracy of 4 digits after the dot */
         }
         printf("\n");
     }
@@ -288,7 +289,7 @@ void printFinalCentroids(Cluster *clustersArray, int k, int dimension) {
         for (j = 0; j < dimension; ++j) {
             if (j > 0)
                 printf("%c", COMMA_CHAR);
-            printf("%0.4e", clustersArray[i].currCentroid[j]); /* Print with an accuracy of 4 digits after the dot */
+            printf(PRINT_FORMAT, clustersArray[i].currCentroid[j]);
         }
         printf("\n");
     }
@@ -298,51 +299,12 @@ void printFinalCentroids(Cluster *clustersArray, int k, int dimension) {
 *********** kMeans Algorithm *********
 *************************************/
 
-/*int initVectorsArray(double ***vectorsArrayPtr, const int *numOfVectors, const int *dimension, PyObject *pyVectorsList) {
-    Py_ssize_t i, j;
-    double *matrix;
-    PyObject *vector, *comp;
-    /* Allocate memory for vectorsArrayPtr
-    matrix = (double *) malloc((*numOfVectors) * ((*dimension) + 1) * sizeof(double));
-    *vectorsArrayPtr = malloc((*numOfVectors) * sizeof(double *));
-    if (matrix == NULL || (*vectorsArrayPtr) == NULL){
-        if (matrix != NULL)
-            free(matrix); // Free matrix if exist
-            PyErr_SetNone(PyExc_MemoryError);
-            return 1; // Memory allocation error
-    }
-
-    for (i = 0; i < *numOfVectors; ++i) {
-        (*vectorsArrayPtr)[i] = matrix + i * ((*dimension) + 1); // Set VectorsArray to point to 2nd dimension array
-        vector = PyList_GetItem(pyVectorsList, i);
-        if (!PyList_Check(vector)) {
-            MyPy_TypeErr("List", vector);
-            free(*vectorsArrayPtr);
-            free(matrix);
-            *vectorsArrayPtr = NULL;
-            return 1; // Type error - not a python List
-        }
-        for (j = 0; j < *dimension; ++j) {
-            comp = PyList_GetItem(vector, j);
-            (*vectorsArrayPtr)[i][j] = PyFloat_AsDouble(comp);
-            if (PyErr_Occurred()) {
-                free(*vectorsArrayPtr);
-                free(matrix);
-                *vectorsArrayPtr = NULL;
-                return 1; /* Cast error to double
-            }
-        }
-    }
-    return 0; /* Success
-}
-*/
-
 Cluster *kMeans(int k, int maxIter, int dimension, int numOfVectors, double **vectorsArray, int *firstCentralIndexes) {
     int i, changes;
     Cluster *clustersArray;
 
     /* Initialize clusters arrays */
-    clustersArray = initClusters(vectorsArray, &k, &dimension, firstCentralIndexes);
+    clustersArray = initClusters(vectorsArray, k, dimension, firstCentralIndexes);
 
     for (i = 0; i < maxIter; ++i) {
         initCurrCentroidAndCounter(clustersArray, &k, &dimension); /* Update curr centroid to prev centroid and reset the counter */
@@ -355,33 +317,30 @@ Cluster *kMeans(int k, int maxIter, int dimension, int numOfVectors, double **ve
     return clustersArray;
 }
 
-Cluster *initClusters(double **vectorsArray, const int *k, const int *dimension, int *firstCentralIndexes) {
+Cluster *initClusters(double **vectorsArray, int k, int dimension, int *firstCentralIndexes) {
     int i, j;
     Cluster *clustersArray;
     /* Allocate memory for clustersArray */
-    clustersArray = (Cluster *) malloc((*k) * sizeof(Cluster));
-    MyAssert(clustersArray != NULL);
+    clustersArray = (Cluster *) myAlloc(NULL, k, sizeof(Cluster));
 
-    for (i = 0; i < *k; ++i) {
+    for (i = 0; i < k; ++i) {
         clustersArray[i].counter = 0;
-        clustersArray[i].prevCentroid = (double *) malloc((*dimension) * sizeof(double));
-        clustersArray[i].currCentroid = (double *) malloc((*dimension) * sizeof(double));
-        MyAssert(clustersArray[i].prevCentroid != NULL && clustersArray[i].currCentroid != NULL);
-
+        clustersArray[i].prevCentroid = (double *) myAlloc(NULL, dimension, sizeof(double));
+        clustersArray[i].currCentroid = (double *) myAlloc(NULL, dimension, sizeof(double));
 
         if (firstCentralIndexes == NULL) { /* Kmeans */
-            for (j = 0; j < *dimension; ++j) {
+            for (j = 0; j < dimension; ++j) {
                 /* Assign the first k vectors to their corresponding clusters */
                 clustersArray[i].currCentroid[j] = vectorsArray[i][j];
             }
         } else { /* kMeans++ */
             /* Assign the initial k vectors to their corresponding clusters according to the ones calculated in python */
-            for (j = 0; j < *dimension; ++j) {
+            for (j = 0; j < dimension; ++j) {
                 clustersArray[i].currCentroid[j] = vectorsArray[firstCentralIndexes[i]][j];
             }
         }
     }
-    // free(firstCentralIndexes); /* No longer necessary */
+    free(firstCentralIndexes); /* No longer necessary */
     return clustersArray;
 }
 
@@ -454,12 +413,12 @@ void initCurrCentroidAndCounter(Cluster *clustersArray, const int *k, const int 
 *********** Jacobi Algorithm *********
 *************************************/
 
-void pivotIndex(double *matrix, int n, int *pivotRow, int *pivotCol) {
+void pivotIndex(double **matrix, int n, int *pivotRow, int *pivotCol) {
     int i, j;
     double maxAbs = -1, tempValue;
     for (i = 0; i < n; ++i) {
         for (j = i + 1; j < n; ++j) {
-            tempValue = fabs(matrix[j + i * n]);
+            tempValue = fabs(matrix[i][j]);
             if (maxAbs < tempValue) {
                 maxAbs = tempValue;
                 *pivotRow = i;
@@ -469,77 +428,73 @@ void pivotIndex(double *matrix, int n, int *pivotRow, int *pivotCol) {
     }
 }
 
-void initIdentityMatrix(double *matrix, int n) {
-    int i ,j;
+void initIdentityMatrix(double **matrix, int n) {
+    int i, j;
     for (i = 0; i < n; ++i) {
         for (j = 0; j < n; ++j) {
-            if (i == j)
-                matrix[j + i * n] = 1.0;
-            else
-                matrix[j + i * n] = 0.0;
+            matrix[i][j] = i == j ? 1.0 : 0.0;
         }
     }
 }
 
-double jacobiRotate(double *a, double *v, int n, int i, int j) {
+double jacobiRotate(double **a, double **v, int n, int i, int j) {
     double theta, t, c, s;
-    double ij, ii, jj, ri, rj;
+    double ij, ii, jj, ir, jr;
     int r;
 
-    theta = a[j + j * n] - a[i + i * n]; // Ajj - Aii
-    theta /= (2 * a[j + i * n]);
+    theta = a[j][j] - a[i][i]; // Ajj - Aii
+    theta /= (2 * a[i][j]);
     t = 1.0 / (fabs(theta) + sqrt(SQ(theta) + 1.0));
     t = theta < 0.0 ? -t : t;
     c = 1.0 / sqrt(SQ(t) + 1.0);
     s = t * c;
 
-    ii = a[i + i * n];
-    jj = a[j + j * n];
-    ij = a[j + i * n];
-    a[j + i * n] = 0.0; // Aij = 0
-    a[i + j * n] = 0.0;
+    ii = a[i][i];
+    jj = a[j][j];
+    ij = a[i][j];
+    a[i][j] = 0.0; // Aij = 0
+    a[j][i] = 0.0;
     for (r = 0; r < n; r++) {
         if (r == i)
             // c^2 * Aii + s^2 * Ajj - 2scAij
-            a[i + i * n] = SQ(c) * ii + SQ(s) * jj - 2 * s * c * ij;
+            a[i][i] = SQ(c) * ii + SQ(s) * jj - 2 * s * c * ij;
         else if (r == j)
             // s^2 * Aii + c^2 * Ajj + 2scAij
-            a[j + j * n] = SQ(s) * ii + SQ(c) * jj + 2 * s * c * ij;
+            a[j][j] = SQ(s) * ii + SQ(c) * jj + 2 * s * c * ij;
         else { // r != j, i
-            ri = a[i + r * n];
-            rj = a[j + r * n];
-            a[i + r * n] = c * ri - s * rj;
-            a[j + r * n] = c * rj + s * ri;
-            a[r + i * n] = a[i + r * n];
-            a[r + j * n] = a[j + r * n];
+            ir = a[i][r];
+            jr = a[j][r];
+            a[i][r] = c * ir - s * jr;
+            a[j][r] = c * jr + s * ir;
+            a[r][i] = a[i][r] ;
+            a[r][j] = a[j][r] ;
+
         }
 
         // Update the eigenvector matrix
-        ri = v[i + r * n];
-        rj = v[j + r * n];
-        v[i + r * n] = c * ri - s * rj;
-        v[j + r * n] = c * rj + s * ri;
+        ir = v[i][r];
+        jr = v[j][r];
+        v[i][r] = c * ir - s * jr;
+        v[j][r] = c * jr + s * ir;
     }
 
     return 2 * SQ(ij); // offNormDiff: Off(A)^2 - Off(A')^2 = 2 * Aij^2
 }
 
-Eigenvalue *sortEigenvalues(double *a, double *v, int n) {
-    int i, j, minIndex;
-    double temp, min;
-    Eigenvalue *eigenvalues = malloc(n * sizeof(Eigenvalue));
-    MyAssert(eigenvalues != NULL);
+Eigenvalue *sortEigenvalues(double **a, double **v, int n) {
+    int i;
+    Eigenvalue *eigenvalues = myAlloc(NULL, n, sizeof(Eigenvalue));
 
     for(i = 0; i < n; ++i) {
-        eigenvalues[i].value = a[i + i * n];
-        eigenvalues[i].vector = v + i;
+        eigenvalues[i].value = a[i][i];
+        eigenvalues[i].vector = v[i];
     }
 
     mergeSort(eigenvalues, 0, n - 1);
     return eigenvalues;
 }
 
-void jacobiAlgorithm(double *matrix, double *eigenvectorsMat, int n) {
+void jacobiAlgorithm(double **matrix, double **eigenvectorsMat, int n) {
     double diffOffNorm;
     int jacobiIterCounter, pivotRow, pivotCol;
 
@@ -571,27 +526,28 @@ int eigengapHeuristicKCalc(Eigenvalue *eigenvalues, int n) {
     return maxIndex + 1;
 }
 
-double **initTMatrix(Eigenvalue *eigenvalues, double *freeUsedMem, int n, int k) {
+double **initTMatrix(Eigenvalue *eigenvalues, double **eigenvectorsMat, double **tMat, int n, int k) {
     int i, j;
-    double sumSqRow, **tMat, value;
-    tMat = (double **) alloc2DArray(n, k, sizeof(double), sizeof(double *), freeUsedMem);
+    double sumSqRow, value;
 
     for (i = 0; i < n; ++i) {
         sumSqRow = 0.0;
         for (j = 0; j < k; ++j) {
-            value = eigenvalues[j].vector[i * n];
+            value = eigenvalues[j].vector[i];
             tMat[i][j] = value;
             sumSqRow += SQ(value);
         }
-        if (sumSqRow != 0.0) {
+        if (sumSqRow != 0.0) { // TODO check about zero line
             sumSqRow = 1.0 / sqrt(sumSqRow);
             for (j = 0; j < k; ++j) {
                 tMat[i][j] *= sumSqRow;
             }
         }
     }
-    free(eigenvalues); /* End of use */
-    // printMatrix(tMat, n ,k);
+    /* Free memory */
+    free(eigenvalues);
+    free(eigenvectorsMat[0]);
+    free(eigenvectorsMat);
     return tMat;
 }
 
@@ -604,7 +560,7 @@ double **initTMatrix(Eigenvalue *eigenvalues, double *freeUsedMem, int n, int k)
  * Using sqrt and norm functions
  * Returns the weighted Matrix
  */
-void weightedMatrix(double **wMatrix, double **vectorsArray, int numOfVectors, int dimension) {
+double **weightedMatrix(double **wMatrix, double **vectorsArray, int numOfVectors, int dimension) {
     int i, j;
     double norm;
 
@@ -616,6 +572,7 @@ void weightedMatrix(double **wMatrix, double **vectorsArray, int numOfVectors, i
             wMatrix[j][i] = wMatrix[i][j];
         }
     }
+    return wMatrix;
 }
 
 /*
@@ -625,8 +582,7 @@ void weightedMatrix(double **wMatrix, double **vectorsArray, int numOfVectors, i
 double *dMatrix(double **wMatrix, int dim) {
     int i, j;
     double *dMatrix, sum;
-    dMatrix = (double *) malloc(dim * sizeof(double));
-    MyAssert(dMatrix != NULL);
+    dMatrix = (double *) myAlloc(NULL, dim, sizeof(double));
 
     for (i = 0; i < dim; i++) {
         sum = 0.0;
@@ -656,6 +612,7 @@ double **laplacian(double **wMatrix, double *dMatrix, int numOfVectors) {
                 lMatrix[i][j] += 1.0;
         }
     }
+    free(dMatrix); /* End of need */
     return lMatrix;
 }
 
@@ -716,8 +673,8 @@ void validateAndAssignInput(int argc, char **argv, int *k, GOAL *goal, char **fi
  **** Merge Sort *********
  ************************/
 
-// Merges two subarrays of arr[].
-// First subarray is arr[l..m]
+// Merge two Sub-arrays of arr[].
+// First subarray is arr[l...m]
 // Second subarray is arr[m+1..r]
 void merge(Eigenvalue arr[], int l, int m, int r)
 {
@@ -734,7 +691,7 @@ void merge(Eigenvalue arr[], int l, int m, int r)
     for (j = 0; j < n2; j++)
         R[j] = arr[m + 1 + j];
 
-    /* Merge the temp arrays back into arr[l..r]*/
+    /* Merge the temp arrays back into arr[l...r]*/
     i = 0; // Initial index of first subarray
     j = 0; // Initial index of second subarray
     k = l; // Initial index of merged subarray
