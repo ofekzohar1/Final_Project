@@ -5,7 +5,7 @@
 #include <assert.h>
 
 #define SQ(x) ((x)*(x))
-#define EPSILON 0.001
+#define EPSILON 1.0E-15
 #define MAX_JACOBI_ITER 100
 #define MAX_FEATURES 10
 #define COMMA_CHAR ','
@@ -13,7 +13,7 @@
 #define K_ARGUMENT 1
 #define GOAL_ARGUMENT 2
 #define MAX_KMEANS_ITER 300
-#define MAX_DATAPOINTS 1000
+#define MAX_DATAPOINTS 50
 #define END_OF_STRING '\0'
 #define ERROR_MSG "An Error Has Occurred\n"
 #define INVALID_INPUT_MSG "Invalid Input!\n"
