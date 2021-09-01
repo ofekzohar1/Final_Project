@@ -628,7 +628,7 @@ void calcDim(int *dimension, FILE *file, double *firstLine) {
     do {
         fscanf(file, "%lf%c", &value, &c);
         firstLine[(*dimension)++] = value;
-    } while (c != '\n');
+    } while (c != '\n' && c != '\r');
 }
 
 double **readDataFromFile(int *rows, int *cols, char *fileName, GOAL goal) {
