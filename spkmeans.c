@@ -68,8 +68,8 @@ void initIdentityMatrix(double **matrix, int n);
 int eigengapHeuristicKCalc(Eigenvalue *eigenvalues, int n);
 void **alloc2DArray(int rows, int cols, size_t basicSize, size_t basicPtrSize, void *freeUsedSpace);
 void *myAlloc(void *usedMem, int len, size_t basicSize);
-void merge(Eigenvalue arr[], int l, int m, int r);
-void mergeSort(Eigenvalue arr[], int l, int r);
+void merge(Eigenvalue arr[], int l, int m, int r, Eigenvalue L[], Eigenvalue R[]);
+void mergeSort(Eigenvalue arr[], int l, int r, Eigenvalue L[], Eigenvalue R[]);
 void printFinalCentroids(Cluster *clustersArray, int k, int dimension);
 void printMatrix(double **matrix, int rows, int cols);
 void validateAndAssignInput(int argc, char **argv, int *k, GOAL *goal, char **filenamePtr);
@@ -230,7 +230,7 @@ void **alloc2DArray(int rows, int cols, size_t basicSize, size_t basicPtrSize, v
     matrix = myAlloc(NULL, rows, basicPtrSize);
 
     for (i = 0; i < rows; ++i) {
-        matrix[i] = blockMem + i * cols * basicSize; /* Set matrix to point to 2nd dimension array */
+        matrix[i] = (void *) (((char *) blockMem) + i * cols * basicSize); /* Set matrix to point to 2nd dimension array */
     }
     return matrix;
 }
@@ -282,7 +282,7 @@ GOAL str2enum(const char *str) {
         if (!strcmp(str, GOAL_STRING[j]))
             return j;
     }
-    return EOF;
+    return NUM_OF_GOALS; /* Invalid str to enum convert */
 }
 
 void printFinalCentroids(Cluster *clustersArray, int k, int dimension) {
@@ -485,14 +485,17 @@ double jacobiRotate(double **a, double **v, int n, int i, int j) {
 
 Eigenvalue *sortEigenvalues(double **a, double **v, int n) {
     int i;
-    Eigenvalue *eigenvalues = myAlloc(NULL, n, sizeof(Eigenvalue));
+    Eigenvalue *L, *R, *eigenvalues = myAlloc(NULL, n, sizeof(Eigenvalue));
 
     for(i = 0; i < n; ++i) {
         eigenvalues[i].value = a[i][i];
         eigenvalues[i].vector = v[i];
     }
 
-    mergeSort(eigenvalues, 0, n - 1);
+    L = (Eigenvalue *) myAlloc(NULL, 2 * n, sizeof(Eigenvalue));
+    R = &L[n];
+    mergeSort(eigenvalues, 0, n - 1, L, R);
+    free(L);
     return eigenvalues;
 }
 
@@ -664,7 +667,7 @@ void validateAndAssignInput(int argc, char **argv, int *k, GOAL *goal, char **fi
         *goal = str2enum(argv[GOAL_ARGUMENT]);
         *filenamePtr = argv[REQUIRED_NUM_OF_ARGUMENTS - 1];
         /* k greater than zero and the conversion succeeded, valid goal */
-        if (*k >= 0 && *nextCh == END_OF_STRING && *goal != EOF)
+        if (*k >= 0 && *nextCh == END_OF_STRING && *goal < NUM_OF_GOALS)
             return;
     }
     printf(INVALID_INPUT_MSG);
@@ -678,14 +681,11 @@ void validateAndAssignInput(int argc, char **argv, int *k, GOAL *goal, char **fi
 /* Merge two Sub-arrays of arr[].
  First subarray is arr[l...m]
  Second subarray is arr[m+1..r] */
-void merge(Eigenvalue arr[], int l, int m, int r)
+void merge(Eigenvalue arr[], int l, int m, int r, Eigenvalue L[], Eigenvalue R[])
 {
     int i, j, k;
     int n1 = m - l + 1;
     int n2 = r - m;
-
-    /* create temp arrays */
-    Eigenvalue L[n1], R[n2];
 
     /* Copy data to temp arrays L[] and R[] */
     for (i = 0; i < n1; i++)
@@ -728,7 +728,7 @@ void merge(Eigenvalue arr[], int l, int m, int r)
 
 /* l is for left index and r is right index of the
 sub-array of arr to be sorted */
-void mergeSort(Eigenvalue arr[], int l, int r)
+void mergeSort(Eigenvalue arr[], int l, int r, Eigenvalue L[], Eigenvalue R[])
 {
     if (l < r) {
         /* Same as (l+r)/2, but avoids overflow for */
@@ -736,10 +736,10 @@ void mergeSort(Eigenvalue arr[], int l, int r)
         int m = l + (r - l) / 2;
 
         /* Sort first and second halves */
-        mergeSort(arr, l, m);
-        mergeSort(arr, m + 1, r);
+        mergeSort(arr, l, m, L, R);
+        mergeSort(arr, m + 1, r, L, R);
 
-        merge(arr, l, m, r);
+        merge(arr, l, m, r, L, R);
     }
 }
 
