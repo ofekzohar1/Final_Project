@@ -3,6 +3,7 @@
 #include <math.h>
 #include <string.h>
 #include <assert.h>
+#include <ctype.h>
 
 #define SQ(x) ((x)*(x))
 #define EPSILON 1.0E-15
@@ -25,6 +26,9 @@ fprintf(stderr, ERROR_MSG); \
 assert (exp);   \
 exit(EXIT_FAILURE);     \
 }
+
+/* Avoid -0.0000 representation */
+#define NegZero(value) (value) < 0.0 && (value) > -0.00005 ? -(value) : (value)
 
 #define FOREACH_GOAL(GOAL) \
 GOAL(jacobi) \
@@ -51,7 +55,7 @@ typedef struct {
 
 typedef struct {
     double value;
-    double *vector;
+    int vector;
 } Eigenvalue;
 
 double **fitClusteringToOriginData(int k, int dimension, int numOfVectors, double **vectorsArray, double **originData, Cluster *clustersArray);
@@ -80,9 +84,12 @@ double **laplacian(double **wMatrix, double *dMatrix, int numOfVectors);
 void calcDim(int *dimension, FILE *file, double *firstLine);
 double **initTMatrix(Eigenvalue *eigenvalues, double **eigenvectorsMat, double **tMat, int n, int k);
 Eigenvalue *sortEigenvalues(double **a, double **v, int n);
+int cmpEigenvalues (const void *p1, const void *p2);
 void printTest(double **a, double*v, int n);
 void pivotIndex(double **matrix, int n, int *pivotRow, int *pivotCol);
 void printJacobi(double **a, double **v, int n);
+void printDiagMat(double *matrix, int n);
+GOAL str2enum(char *str);
 
 /**********************************
 *********** Main ******************
@@ -92,13 +99,17 @@ int main(int argc, char *argv[]) {
     int k, dimension, numOfDatapoints;
     GOAL goal;
     char *filename;
-    double **datapointsArray, **tMat, **wMat, **lnormMat, **eigenvectorsMat, *ddgMat, **freeUsedMem;
+    double **datapointsArray, **tMat, **wMat, **lnormMat, **eigenvectorsMat, *ddgMat, **freeUsedMem = NULL;
     Eigenvalue *eigenvalues;
     Cluster *clustersArray = NULL;
     /* int firstIndex[] = {44,46,68,64}; */
 
     validateAndAssignInput(argc, argv, &k, &goal, &filename);
     datapointsArray = readDataFromFile(&numOfDatapoints, &dimension, filename, goal);
+    if (goal == spk && k >= numOfDatapoints) {
+        printf(INVALID_INPUT_MSG);
+        goto end;
+    }
 
     freeUsedMem = (double **) alloc2DArray(numOfDatapoints, numOfDatapoints, sizeof(double), sizeof(double *), NULL);
     if (goal == jacobi) {
@@ -116,7 +127,7 @@ int main(int argc, char *argv[]) {
 
     ddgMat = dMatrix(wMat, numOfDatapoints);
     if (goal==ddg){
-        printMatrix(&ddgMat, 1, numOfDatapoints);
+        printDiagMat(ddgMat, numOfDatapoints);
         free(ddgMat);
         goto end;
     }
@@ -147,11 +158,14 @@ int main(int argc, char *argv[]) {
 
 void printJacobi(double **a, double **v, int n) {
     int i;
+    double value;
     
     for (i = 0; i < n; ++i) {
         if (i != 0)
             printf("%c", COMMA_CHAR);
-        printf(PRINT_FORMAT, a[i][i]);
+        value = a[i][i];
+        value = NegZero(value);
+        printf(PRINT_FORMAT, value);
     }
     printf("\n");
     printMatrix(v, n, n);
@@ -265,19 +279,47 @@ void freeMemoryVectorsClusters(double **vectorsArray, double **originData, Clust
 
 void printMatrix(double **matrix, int rows, int cols) {
     int i, j;
+    double value;
 
     for (i = 0; i < rows; ++i) {
         for (j = 0; j < cols; ++j) {
             if (j > 0)
                 printf("%c", COMMA_CHAR);
-            printf(PRINT_FORMAT, matrix[i][j]); /* Print with an accuracy of 4 digits after the dot */
+            value = matrix[i][j];
+            value = NegZero(value);
+            printf(PRINT_FORMAT, value); /* Print with an accuracy of 4 digits after the dot */
         }
         printf("\n");
     }
 }
 
-GOAL str2enum(const char *str) {
+void printDiagMat(double *matrix, int n) {
+    int i, j;
+    double value;
+
+    for (i = 0; i < n; ++i) {
+        for (j = 0; j < n; ++j) {
+            if (j > 0)
+                printf("%c", COMMA_CHAR);
+            if (i != j)
+                value = 0.0;
+            else {
+                value = matrix[i];
+                value = NegZero(value);
+            }
+            printf(PRINT_FORMAT, value); /* Print with an accuracy of 4 digits after the dot */
+        }
+        printf("\n");
+    }
+}
+
+GOAL str2enum(char *str) {
     int j;
+    /* Str to lowercase */
+    for (j = 0; str[j] != END_OF_STRING; ++j){
+        str[j] = (char) tolower(str[j]);
+    }
+
     for (j = 0; j < NUM_OF_GOALS; ++j) {
         if (!strcmp(str, GOAL_STRING[j]))
             return j;
@@ -287,11 +329,15 @@ GOAL str2enum(const char *str) {
 
 void printFinalCentroids(Cluster *clustersArray, int k, int dimension) {
     int i, j;
+    double value;
+
     for (i = 0; i < k; ++i) {
         for (j = 0; j < dimension; ++j) {
             if (j > 0)
                 printf("%c", COMMA_CHAR);
-            printf(PRINT_FORMAT, clustersArray[i].currCentroid[j]);
+            value = clustersArray[i].currCentroid[j];
+            value = NegZero(value);
+            printf(PRINT_FORMAT, value);
         }
         printf("\n");
     }
@@ -428,6 +474,8 @@ void pivotIndex(double **matrix, int n, int *pivotRow, int *pivotCol) {
             }
         }
     }
+    if (maxAbs == 0.0)
+        *pivotRow = EOF; /* Matrix is diagonal */
 }
 
 void initIdentityMatrix(double **matrix, int n) {
@@ -485,18 +533,25 @@ double jacobiRotate(double **a, double **v, int n, int i, int j) {
 
 Eigenvalue *sortEigenvalues(double **a, double **v, int n) {
     int i;
-    Eigenvalue *L, *R, *eigenvalues = myAlloc(NULL, n, sizeof(Eigenvalue));
+    Eigenvalue *eigenvalues = myAlloc(NULL, n, sizeof(Eigenvalue));
 
     for(i = 0; i < n; ++i) {
         eigenvalues[i].value = a[i][i];
-        eigenvalues[i].vector = v[i];
+        eigenvalues[i].vector = i;
     }
 
-    L = (Eigenvalue *) myAlloc(NULL, 2 * n, sizeof(Eigenvalue));
-    R = &L[n];
-    mergeSort(eigenvalues, 0, n - 1, L, R);
-    free(L);
+    qsort(eigenvalues, n, sizeof(Eigenvalue), cmpEigenvalues);
     return eigenvalues;
+}
+
+int cmpEigenvalues (const void *p1, const void *p2) {
+    const Eigenvalue *q1 = p1, *q2 = p2;
+
+    if (q1->value > q2->value)
+        return 1;
+    else if (q1->value < q2->value)
+        return -1;
+    return (q1->vector - q2->vector); /* Keeps qsort comparator stable */
 }
 
 void jacobiAlgorithm(double **matrix, double **eigenvectorsMat, int n) {
@@ -508,6 +563,8 @@ void jacobiAlgorithm(double **matrix, double **eigenvectorsMat, int n) {
     jacobiIterCounter = 0;
     do {
         pivotIndex(matrix, n, &pivotRow, &pivotCol);
+        if (pivotRow == EOF) /* Matrix is already diagonal */
+            break;
         diffOffNorm = jacobiRotate(matrix, eigenvectorsMat, n, pivotRow, pivotCol);
         jacobiIterCounter++;
     } while (jacobiIterCounter < MAX_JACOBI_ITER && diffOffNorm >= EPSILON);
@@ -538,7 +595,7 @@ double **initTMatrix(Eigenvalue *eigenvalues, double **eigenvectorsMat, double *
     for (i = 0; i < n; ++i) {
         sumSqRow = 0.0;
         for (j = 0; j < k; ++j) {
-            value = eigenvalues[j].vector[i];
+            value = eigenvectorsMat[eigenvalues[j].vector][i];
             tMat[i][j] = value;
             sumSqRow += SQ(value);
         }
@@ -663,12 +720,19 @@ void validateAndAssignInput(int argc, char **argv, int *k, GOAL *goal, char **fi
     char *nextCh;
 
     if (argc >= REQUIRED_NUM_OF_ARGUMENTS) {
-        *k = strtol(argv[K_ARGUMENT], &nextCh, 10);
         *goal = str2enum(argv[GOAL_ARGUMENT]);
         *filenamePtr = argv[REQUIRED_NUM_OF_ARGUMENTS - 1];
-        /* k greater than zero and the conversion succeeded, valid goal */
-        if (*k >= 0 && *nextCh == END_OF_STRING && *goal < NUM_OF_GOALS)
-            return;
+        if (*goal < NUM_OF_GOALS) {
+            if (*goal != spk) {
+                *k = 0;
+                return;
+            } else {
+                /* k greater than zero and the conversion succeeded, valid goal */
+                *k = strtol(argv[K_ARGUMENT], &nextCh, 10);
+                if (*k >= 0 && *nextCh == END_OF_STRING)
+                    return;
+            }
+        }
     }
     printf(INVALID_INPUT_MSG);
     exit(0);
@@ -743,5 +807,20 @@ void mergeSort(Eigenvalue arr[], int l, int r, Eigenvalue L[], Eigenvalue R[])
     }
 }
 
+/*Eigenvalue *sortEigenvalues(double **a, double **v, int n) {
+    int i;
+    Eigenvalue *L, *R, *eigenvalues = myAlloc(NULL, n, sizeof(Eigenvalue));
+
+    for(i = 0; i < n; ++i) {
+        eigenvalues[i].value = a[i][i];
+        eigenvalues[i].vector = v[i];
+    }
+
+    L = (Eigenvalue *) myAlloc(NULL, 2 * n, sizeof(Eigenvalue));
+    R = &L[n];
+    mergeSort(eigenvalues, 0, n - 1, L, R);
+    free(L);
+    return eigenvalues;
+}*/
 
 
