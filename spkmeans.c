@@ -83,7 +83,7 @@ double *dMatrix(double **wMatrix, int dim);
 double **laplacian(double **wMatrix, double *dMatrix, int numOfVectors);
 void calcDim(int *dimension, FILE *file, double *firstLine);
 double **initTMatrix(Eigenvalue *eigenvalues, double **eigenvectorsMat, double **tMat, int n, int k);
-Eigenvalue *sortEigenvalues(double **a, double **v, int n);
+Eigenvalue *sortEigenvalues(double **a, int n);
 int cmpEigenvalues (const void *p1, const void *p2);
 void printTest(double **a, double*v, int n);
 void pivotIndex(double **matrix, int n, int *pivotRow, int *pivotCol);
@@ -140,7 +140,7 @@ int main(int argc, char *argv[]) {
 
     eigenvectorsMat = (double **) alloc2DArray(numOfDatapoints, numOfDatapoints, sizeof(double), sizeof(double *), NULL);
     jacobiAlgorithm(lnormMat, eigenvectorsMat, numOfDatapoints);
-    eigenvalues = sortEigenvalues(lnormMat, eigenvectorsMat, numOfDatapoints);
+    eigenvalues = sortEigenvalues(lnormMat, numOfDatapoints);
     freeUsedMem = lnormMat;
 
     if (k == 0)
@@ -531,7 +531,7 @@ double jacobiRotate(double **a, double **v, int n, int i, int j) {
     return 2 * SQ(ij); /* offNormDiff: Off(A)^2 - Off(A')^2 = 2 * Aij^2 */
 }
 
-Eigenvalue *sortEigenvalues(double **a, double **v, int n) {
+Eigenvalue *sortEigenvalues(double **a, int n) {
     int i;
     Eigenvalue *eigenvalues = myAlloc(NULL, n, sizeof(Eigenvalue));
 
