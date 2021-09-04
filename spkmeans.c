@@ -661,8 +661,10 @@ double **initTMatrix(Eigenvalue *eigenvalues, double **eigenvectorsMat, void *fr
     }
     /* Free memory */
     MyFree(eigenvalues);
-    if (eigenvectorsMat != NULL)
-        MyFree(*eigenvectorsMat);
+    if (eigenvectorsMat != NULL) {
+        myFree(*eigenvectorsMat);
+        eigenvectorsMat = NULL;
+    }
     return tMat;
 }
 
