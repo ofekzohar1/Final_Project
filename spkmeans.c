@@ -286,9 +286,10 @@ void *myAlloc(void *usedMem, size_t size) {
 }
 
 void myFree(void *blockMem) {
+    void **effectiveBlockMem;
     if (blockMem == NULL)
         return;
-    void **effectiveBlockMem = (void **)((char *)blockMem - SIZE_OF_VOID_2PTR * 2);
+    effectiveBlockMem = (void **)((char *)blockMem - SIZE_OF_VOID_2PTR * 2);
     if(effectiveBlockMem[0] != NULL) {
         ((void **)effectiveBlockMem[0])[1] = effectiveBlockMem[1]; /* Set prev's next to current next */
     } else {
