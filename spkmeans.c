@@ -19,16 +19,20 @@
 #define PRINT_FORMAT "%.4f"
 #define ERROR_MSG "An Error Has Occurred\n"
 #define INVALID_INPUT_MSG "Invalid Input!\n"
+#define SIZE_OF_VOID_2PTR sizeof(void **)
 
 #define MyAssert(exp) \
 if (!(exp)) {      \
 fprintf(stderr, ERROR_MSG); \
-assert (exp);   \
+freeAllMemory();                      \
+assert (exp);          \
 exit(EXIT_FAILURE);     \
 }
 
 /* Avoid -0.0000 representation */
 #define NegZero(value) (value) < 0.0 && (value) > -0.00005 ? -(value) : (value)
+
+#define MyFree(block) myFree(block); block = NULL
 
 #define FOREACH_GOAL(GOAL) \
 GOAL(jacobi) \
@@ -66,7 +70,7 @@ int findMyCluster(double *vec, Cluster *clustersArray, const int *k, const int *
 void assignVectorsToClusters(double **vectorsArray, Cluster *clustersArray, const int *k, const int *numOfVectors, const int *dimension); /* For any vector assign to his closest cluster */
 int recalcCentroids(Cluster *clustersArray, const int *k, const int *dimension); /* Recalculate clusters' centroids, return number of changes */
 void initCurrCentroidAndCounter(Cluster *clustersArray, const int *k, const int *dimension); /* Set curr centroid to prev centroid and reset the counter */
-void freeMemoryVectorsClusters(double **vectorsArray, double **originData, Cluster *clustersArray, int k); /* Free the allocated memory */
+void freeAllMemory(); /* Free the allocated memory */
 void jacobiAlgorithm(double **matrix, double **eigenvectorsMat, int n);
 void initIdentityMatrix(double **matrix, int n);
 int eigengapHeuristicKCalc(Eigenvalue *eigenvalues, int n);
@@ -90,6 +94,9 @@ void pivotIndex(double **matrix, int n, int *pivotRow, int *pivotCol);
 void printJacobi(double **a, double **v, int n);
 void printDiagMat(double *matrix, int n);
 GOAL str2enum(char *str);
+void myFree(void *blockMem);
+
+void **headOfMemList;
 
 /**********************************
 *********** Main ******************
@@ -99,9 +106,10 @@ int main(int argc, char *argv[]) {
     int k, dimension, numOfDatapoints;
     GOAL goal;
     char *filename;
-    double **datapointsArray, **tMat, **wMat, **lnormMat, **eigenvectorsMat, *ddgMat, **freeUsedMem = NULL;
+    double **datapointsArray, **tMat, **wMat, **lnormMat, **eigenvectorsMat, *ddgMat, **freeUsedMem;
     Eigenvalue *eigenvalues;
-    Cluster *clustersArray = NULL;
+    Cluster *clustersArray;
+    headOfMemList = NULL;
     /* int firstIndex[] = {44,46,68,64}; */
 
     validateAndAssignInput(argc, argv, &k, &goal, &filename);
@@ -128,7 +136,7 @@ int main(int argc, char *argv[]) {
     ddgMat = dMatrix(wMat, numOfDatapoints);
     if (goal==ddg){
         printDiagMat(ddgMat, numOfDatapoints);
-        free(ddgMat);
+        MyFree(ddgMat);
         goto end;
     }
 
@@ -152,14 +160,14 @@ int main(int argc, char *argv[]) {
     freeUsedMem = tMat;
 
     end:
-    freeMemoryVectorsClusters(freeUsedMem, datapointsArray, clustersArray, k);
+    freeAllMemory();
     return 0;
 }
 
 void printJacobi(double **a, double **v, int n) {
     int i;
     double value;
-    
+
     for (i = 0; i < n; ++i) {
         if (i != 0)
             printf("%c", COMMA_CHAR);
@@ -201,7 +209,7 @@ double **dataClustering(int k, int maxIter, int dimension, int numOfVectors, dou
     clustersArray = kMeans(k, maxIter, k, numOfVectors, vectorsArray, firstCentralIndexes);
     originDataCentroids = fitClusteringToOriginData(k, dimension, numOfVectors, vectorsArray, originData, clustersArray);
 
-    freeMemoryVectorsClusters(vectorsArray, originData, clustersArray, k);
+    freeAllMemory(vectorsArray, originData, clustersArray, k);
     return originDataCentroids;
 }
 
@@ -251,26 +259,73 @@ void **alloc2DArray(int rows, int cols, size_t basicSize, size_t basicPtrSize, v
 }
 
 void *myAlloc(void *usedMem, size_t size) {
-    void *blockMem = realloc(usedMem, size);
-    MyAssert(blockMem != NULL);
+    void *effectiveUsedMem = usedMem != NULL ? (void *)((char *)usedMem - SIZE_OF_VOID_2PTR * 2) : NULL;
+    void *blockMem, **blockMemPlusPtr = (void **)realloc(effectiveUsedMem, size + SIZE_OF_VOID_2PTR * 2);
+    MyAssert(blockMemPlusPtr != NULL);
+    blockMem = (void *)((char *)blockMemPlusPtr + SIZE_OF_VOID_2PTR * 2);
+    if (usedMem == NULL) { /* New Allocation */
+        /* Set ptr to the prev/next dynamic allocated memory block */
+        blockMemPlusPtr[0] = NULL;
+        if (headOfMemList != NULL) {
+            blockMemPlusPtr[1] = headOfMemList;
+            ((void **)headOfMemList)[0] = blockMemPlusPtr;
+        } else
+            blockMemPlusPtr[1] = NULL;
+        headOfMemList = blockMemPlusPtr;
+    } else {
+       if (effectiveUsedMem != blockMemPlusPtr) {
+           if (blockMemPlusPtr[0] != NULL)
+               ((void **)blockMemPlusPtr[0])[1] = blockMemPlusPtr;
+           else
+               headOfMemList = blockMemPlusPtr;
+           if(blockMemPlusPtr[1] != NULL)
+               ((void **)blockMemPlusPtr[1])[0] = blockMemPlusPtr;
+       }
+    }
     return blockMem;
 }
 
-void freeMemoryVectorsClusters(double **vectorsArray, double **originData, Cluster *clustersArray, int k) {
+void myFree(void *blockMem) {
+    if (blockMem == NULL)
+        return;
+    void **effectiveBlockMem = (void **)((char *)blockMem - SIZE_OF_VOID_2PTR * 2);
+    if(effectiveBlockMem[0] != NULL) {
+        ((void **)effectiveBlockMem[0])[1] = effectiveBlockMem[1]; /* Set prev's next to current next */
+    } else {
+        headOfMemList = effectiveBlockMem[1];
+    }
+    if(effectiveBlockMem[1] != NULL) {
+        ((void **)effectiveBlockMem[1])[0] = effectiveBlockMem[0]; /* Set next's prev to current prev */
+    }
+    free(effectiveBlockMem);
+}
+
+void freeAllMemory() {
+    void **cuurBlock = headOfMemList, **nextBlock;
+
+    while (cuurBlock != NULL) {
+        nextBlock = cuurBlock[1];
+        free(cuurBlock);
+        cuurBlock = nextBlock;
+    }
+    headOfMemList = NULL;
+}
+
+/*void freeAllMemory(double **vectorsArray, double **originData, Cluster *clustersArray, int k) {
     int i;
-    /* Free clusters */
+    *//* Free clusters *//*
     if (clustersArray != NULL) {
         for (i = 0; i < k; ++i) {
-            free(clustersArray[i].currCentroid);
-            free(clustersArray[i].prevCentroid);
+            MyFree(clustersArray[i].currCentroid);
+            MyFree(clustersArray[i].prevCentroid);
         }
     }
-    free(clustersArray);
+    MyFree(clustersArray);
     if (vectorsArray != NULL)
-        free(*vectorsArray);
+        MyFree(*vectorsArray);
     if (originData != NULL)
-        free(*originData);
-}
+        MyFree(*originData);
+}*/
 
 void printMatrix(double **matrix, int rows, int cols) {
     int i, j;
@@ -357,6 +412,10 @@ Cluster *kMeans(int k, int maxIter, int dimension, int numOfVectors, double **ve
             break;
         }
     }
+    for (i = 0; i < numOfVectors; ++i){
+        printf("%d: %f\n", i, vectorsArray[i][dimension]);
+    }
+    printf("\n");
     return clustersArray;
 }
 
@@ -383,7 +442,7 @@ Cluster *initClusters(double **vectorsArray, int k, int dimension, int *firstCen
             }
         }
     }
-    free(firstCentralIndexes); /* No longer necessary */
+    myFree(firstCentralIndexes); /* No longer necessary */
     return clustersArray;
 }
 
@@ -604,9 +663,9 @@ double **initTMatrix(Eigenvalue *eigenvalues, double **eigenvectorsMat, void *fr
         }
     }
     /* Free memory */
-    free(eigenvalues);
+    MyFree(eigenvalues);
     if (eigenvectorsMat != NULL)
-        free(*eigenvectorsMat);
+        MyFree(*eigenvectorsMat);
     return tMat;
 }
 
@@ -671,7 +730,7 @@ double **laplacian(double **wMatrix, double *dMatrix, int numOfVectors) {
                 lMatrix[i][j] += 1.0;
         }
     }
-    free(dMatrix); /* End of need */
+    MyFree(dMatrix); /* End of need */
     return lMatrix;
 }
 
@@ -816,7 +875,7 @@ void mergeSort(Eigenvalue arr[], int l, int r, Eigenvalue L[], Eigenvalue R[])
     L = (Eigenvalue *) myAlloc(NULL, 2 * n * sizeof(Eigenvalue));
     R = &L[n];
     mergeSort(eigenvalues, 0, n - 1, L, R);
-    free(L);
+    myFree(L);
     return eigenvalues;
 }*/
 
