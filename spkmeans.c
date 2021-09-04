@@ -413,10 +413,6 @@ Cluster *kMeans(int k, int maxIter, int dimension, int numOfVectors, double **ve
             break;
         }
     }
-    for (i = 0; i < numOfVectors; ++i){
-        printf("%d: %f\n", i, vectorsArray[i][dimension]);
-    }
-    printf("\n");
     return clustersArray;
 }
 
