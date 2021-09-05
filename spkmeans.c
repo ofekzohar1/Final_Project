@@ -76,8 +76,6 @@ void initIdentityMatrix(double **matrix, int n);
 int eigengapHeuristicKCalc(Eigenvalue *eigenvalues, int n);
 void **alloc2DArray(int rows, int cols, size_t basicSize, size_t basicPtrSize, void *freeUsedMem);
 void *myAlloc(void *usedMem, size_t size);
-void merge(Eigenvalue arr[], int l, int m, int r, Eigenvalue L[], Eigenvalue R[]);
-void mergeSort(Eigenvalue arr[], int l, int r, Eigenvalue L[], Eigenvalue R[]);
 void printFinalCentroids(Cluster *clustersArray, int k, int dimension);
 void printMatrix(double **matrix, int rows, int cols);
 void validateAndAssignInput(int argc, char **argv, int *k, GOAL *goal, char **filenamePtr);
@@ -89,7 +87,6 @@ void calcDim(int *dimension, FILE *file, double *firstLine);
 double **initTMatrix(Eigenvalue *eigenvalues, double **eigenvectorsMat, void *freeUsedMem, int n, int k);
 Eigenvalue *sortEigenvalues(double **a, int n);
 int cmpEigenvalues (const void *p1, const void *p2);
-void printTest(double **a, double*v, int n);
 void pivotIndex(double **matrix, int n, int *pivotRow, int *pivotCol);
 void printJacobi(double **a, double **v, int n);
 void printDiagMat(double *matrix, int n);
@@ -177,25 +174,6 @@ void printJacobi(double **a, double **v, int n) {
     }
     printf("\n");
     printMatrix(v, n, n);
-}
-
-void printTest(double **a, double*v, int n) {
-    int i, j;
-
-    FILE *file = fopen("..\\output3.txt", "w");
-    for (i = 0; i < n; ++i) {
-        fprintf(file, "%.4f,", a[i][i]);
-    }
-    fprintf(file, "\n\n");
-    for (i = 0; i < n; ++i) {
-        for (j = 0; j < n; ++j) {
-            if (j > 0)
-                fprintf(file, "%c", COMMA_CHAR);
-            fprintf(file, PRINT_FORMAT, v[j + i * n]);
-        }
-        fprintf(file, "\n");
-    }
-    fclose(file);
 }
 
 /**********************************
@@ -792,90 +770,3 @@ void validateAndAssignInput(int argc, char **argv, int *k, GOAL *goal, char **fi
     printf(INVALID_INPUT_MSG);
     exit(0);
 }
-
-/*************************
- **** Merge Sort *********
- ************************/
-
-/* Merge two Sub-arrays of arr[].
- First subarray is arr[l...m]
- Second subarray is arr[m+1..r] */
-void merge(Eigenvalue arr[], int l, int m, int r, Eigenvalue L[], Eigenvalue R[])
-{
-    int i, j, k;
-    int n1 = m - l + 1;
-    int n2 = r - m;
-
-    /* Copy data to temp arrays L[] and R[] */
-    for (i = 0; i < n1; i++)
-        L[i] = arr[l + i];
-    for (j = 0; j < n2; j++)
-        R[j] = arr[m + 1 + j];
-
-    /* Merge the temp arrays back into arr[l...r]*/
-    i = 0; /* Initial index of first subarray */
-    j = 0; /* Initial index of second subarray */
-    k = l; /* Initial index of merged subarray */
-    while (i < n1 && j < n2) {
-        if (L[i].value <= R[j].value) {
-            arr[k] = L[i];
-            i++;
-        }
-        else {
-            arr[k] = R[j];
-            j++;
-        }
-        k++;
-    }
-
-    /* Copy the remaining elements of L[], if there
-	are any */
-    while (i < n1) {
-        arr[k] = L[i];
-        i++;
-        k++;
-    }
-
-    /* Copy the remaining elements of R[], if there
-	are any */
-    while (j < n2) {
-        arr[k] = R[j];
-        j++;
-        k++;
-    }
-}
-
-/* l is for left index and r is right index of the
-sub-array of arr to be sorted */
-void mergeSort(Eigenvalue arr[], int l, int r, Eigenvalue L[], Eigenvalue R[])
-{
-    if (l < r) {
-        /* Same as (l+r)/2, but avoids overflow for */
-        /* large l and h */
-        int m = l + (r - l) / 2;
-
-        /* Sort first and second halves */
-        mergeSort(arr, l, m, L, R);
-        mergeSort(arr, m + 1, r, L, R);
-
-        merge(arr, l, m, r, L, R);
-    }
-}
-
-/*Eigenvalue *sortEigenvalues(double **a, double **v, int n) {
-    int i;
-    Eigenvalue *L, *R, *eigenvalues = myAlloc(NULL, n * sizeof(Eigenvalue));
-
-    for(i = 0; i < n; ++i) {
-        eigenvalues[i].value = a[i][i];
-        eigenvalues[i].vector = v[i];
-    }
-
-    L = (Eigenvalue *) myAlloc(NULL, 2 * n * sizeof(Eigenvalue));
-    R = &L[n];
-    mergeSort(eigenvalues, 0, n - 1, L, R);
-    myFree(L);
-    return eigenvalues;
-}*/
-
-
