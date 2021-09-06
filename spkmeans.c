@@ -209,7 +209,7 @@ double **weightedMatrix(double **vectorsArray, int numOfVectors, int dimension) 
 double **dMatrix(double **wMatrix, int n) {
     int i, j;
     double **dMatrix, sum;
-    dMatrix = (double *) alloc2DArray(n, n, sizeof(double), sizeof(double *), freeUsedMem);
+    dMatrix = (double **) alloc2DArray(n, n, sizeof(double), sizeof(double *), freeUsedMem);
 
     for (i = 0; i < n; i++) {
         sum = 0.0;
