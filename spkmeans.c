@@ -33,6 +33,7 @@ exit(EXIT_FAILURE);     \
 #define NegZero(value) (value) < 0.0 && (value) > -0.00005 ? -(value) : (value)
 
 #define MyFree(block) myFree(block); block = NULL
+#define MyRecycleMatFree(block) freeUsedMem = *block; block = NULL
 
 #define FOREACH_GOAL(GOAL) \
 GOAL(jacobi) \
@@ -65,26 +66,26 @@ typedef struct {
 double **fitClusteringToOriginData(int k, int dimension, int numOfVectors, double **vectorsArray, double **originData, Cluster *clustersArray);
 Cluster *kMeans(int k, int maxIter, int dimension, int numOfVectors, double **vectorsArray, int *firstCentralIndexes);
 Cluster *initClusters(double **vectorsArray, int k, int dimension, int *firstCentralIndexes);
-double vectorsNorm(const double *vec1, const double *vec2, const int *dimension); /* Calculate the norm between 2 vectors */
-int findMyCluster(double *vec, Cluster *clustersArray, const int *k, const int *dimension); /* Return the vector's closest cluster (in terms of norm) */
-void assignVectorsToClusters(double **vectorsArray, Cluster *clustersArray, const int *k, const int *numOfVectors, const int *dimension); /* For any vector assign to his closest cluster */
-int recalcCentroids(Cluster *clustersArray, const int *k, const int *dimension); /* Recalculate clusters' centroids, return number of changes */
-void initCurrCentroidAndCounter(Cluster *clustersArray, const int *k, const int *dimension); /* Set curr centroid to prev centroid and reset the counter */
+double vectorsNorm(const double *vec1, const double *vec2, int dimension); /* Calculate the norm between 2 vectors */
+int findMyCluster(double *vec, Cluster *clustersArray, int k, int dimension); /* Return the vector's closest cluster (in terms of norm) */
+void assignVectorsToClusters(double **vectorsArray, Cluster *clustersArray, int k, int numOfVectors, int dimension); /* For any vector assign to his closest cluster */
+int recalcCentroids(Cluster *clustersArray, int k, int dimension); /* Recalculate clusters' centroids, return number of changes */
+void initCurrCentroidAndCounter(Cluster *clustersArray, int k, int dimension); /* Set curr centroid to prev centroid and reset the counter */
 void freeAllMemory(); /* Free the allocated memory */
-void jacobiAlgorithm(double **matrix, double **eigenvectorsMat, int n);
-void initIdentityMatrix(double **matrix, int n);
+double **jacobiAlgorithm(double **matrix, int n);
+double **initIdentityMatrix(int n);
 int eigengapHeuristicKCalc(Eigenvalue *eigenvalues, int n);
-void **alloc2DArray(int rows, int cols, size_t basicSize, size_t basicPtrSize, void *freeUsedMem);
+void **alloc2DArray(int rows, int cols, size_t basicSize, size_t basicPtrSize, void *recycleMemBlock);
 void *myAlloc(void *usedMem, size_t size);
 void printFinalCentroids(Cluster *clustersArray, int k, int dimension);
 void printMatrix(double **matrix, int rows, int cols);
 void validateAndAssignInput(int argc, char **argv, int *k, GOAL *goal, char **filenamePtr);
 double **readDataFromFile(int *rows, int *cols, char *fileName, GOAL goal);
-double **weightedMatrix(double **wMatrix, double **vectorsArray, int numOfVectors, int dimension);
+double **weightedMatrix(double **vectorsArray, int numOfVectors, int dimension);
 double *dMatrix(double **wMatrix, int dim);
 double **laplacian(double **wMatrix, double *dMatrix, int numOfVectors);
 void calcDim(int *dimension, FILE *file, double *firstLine);
-double **initTMatrix(Eigenvalue *eigenvalues, double **eigenvectorsMat, void *freeUsedMem, int n, int k);
+double **initTMatrix(Eigenvalue *eigenvalues, double **eigenvectorsMat, int n, int k);
 Eigenvalue *sortEigenvalues(double **a, int n);
 int cmpEigenvalues (const void *p1, const void *p2);
 void pivotIndex(double **matrix, int n, int *pivotRow, int *pivotCol);
@@ -94,6 +95,7 @@ GOAL str2enum(char *str);
 void myFree(void *blockMem);
 
 void **headOfMemList;
+void *freeUsedMem;
 
 /**********************************
 *********** Main ******************
@@ -101,62 +103,78 @@ void **headOfMemList;
 
 int main(int argc, char *argv[]) {
     int k, dimension, numOfDatapoints;
-    GOAL goal;
+    GOAL goal, task;
     char *filename;
-    double **datapointsArray, **tMat, **wMat, **lnormMat, **eigenvectorsMat, *ddgMat, **freeUsedMem;
+    double **datapointsArray, **tMat, **wMat, **lnormMat, **eigenvectorsMat, *ddgMat;
     Eigenvalue *eigenvalues;
     Cluster *clustersArray;
-    headOfMemList = NULL;
+    headOfMemList = NULL, freeUsedMem = NULL;
     /* int firstIndex[] = {44,46,68,64}; */
 
     validateAndAssignInput(argc, argv, &k, &goal, &filename);
     datapointsArray = readDataFromFile(&numOfDatapoints, &dimension, filename, goal);
     if (goal == spk && k >= numOfDatapoints) {
         printf(INVALID_INPUT_MSG);
-        goto end;
+        return 0;
     }
 
-    freeUsedMem = (double **) alloc2DArray(numOfDatapoints, numOfDatapoints, sizeof(double), sizeof(double *), NULL);
-    if (goal == jacobi) {
-        eigenvectorsMat = freeUsedMem;
-        jacobiAlgorithm(datapointsArray, eigenvectorsMat, numOfDatapoints);
-        printJacobi(datapointsArray, eigenvectorsMat, numOfDatapoints);
-        goto end;
+    switch (goal) {
+        case jacobi:
+            eigenvectorsMat = jacobiAlgorithm(datapointsArray, numOfDatapoints);
+            break;
+        case wam:
+        case ddg:
+        case lnorm:
+        case spk:
+            task = wam;
+            /* The Weighted Adjacency Matrix - step 1.1.1 */
+            wMat = weightedMatrix(datapointsArray, numOfDatapoints, dimension);
+            MyRecycleMatFree(datapointsArray);
+            if (task++ == goal) break;
+            /* The Diagonal Degree Matrix - step 1.1.2 */
+            ddgMat = dMatrix(wMat, numOfDatapoints);
+            if (task++ == goal) break;
+            /* The Normalized Graph Laplacian - step 2 */
+            lnormMat = laplacian(wMat, ddgMat, numOfDatapoints);
+            if (task++ == goal) break;
+            MyFree(ddgMat);
+            /* Determine k and obtain the first k eigenvectors using Jacobi algorithm - step 3 */
+            eigenvectorsMat = jacobiAlgorithm(lnormMat, numOfDatapoints);
+            eigenvalues = sortEigenvalues(lnormMat, numOfDatapoints);
+            MyRecycleMatFree(lnormMat);
+            if (k == 0)
+                k = eigengapHeuristicKCalc(eigenvalues, numOfDatapoints);
+            /* Form the matrix T (from U) - step 4 + 5 */
+            tMat = initTMatrix(eigenvalues, eigenvectorsMat, numOfDatapoints, k);
+            MyRecycleMatFree(eigenvectorsMat);
+            MyFree(eigenvalues);
+            /* Cluster T's rows using kmeans algorithm - step 6 */
+            clustersArray = kMeans(k, MAX_KMEANS_ITER, k, numOfDatapoints, tMat, NULL);
+        default:
+            break; /* TODO exit prog? */
     }
 
-    wMat = weightedMatrix(freeUsedMem, datapointsArray, numOfDatapoints, dimension);
-    if (goal==wam){
-        printMatrix(wMat, numOfDatapoints, numOfDatapoints);
-        goto end;
+    /* Print results */
+    switch (goal) {
+        case jacobi:
+            printJacobi(datapointsArray, eigenvectorsMat, numOfDatapoints);
+            break;
+        case wam:
+            printMatrix(wMat, numOfDatapoints, numOfDatapoints);
+            break;
+        case ddg:
+            printDiagMat(ddgMat, numOfDatapoints);
+            break;
+        case lnorm:
+            printMatrix(lnormMat, numOfDatapoints, numOfDatapoints);
+            break;
+        case spk:
+            printFinalCentroids(clustersArray, k, k);
+            break;
+        default:
+            break; /* TODO exit prog? */
     }
 
-    ddgMat = dMatrix(wMat, numOfDatapoints);
-    if (goal==ddg){
-        printDiagMat(ddgMat, numOfDatapoints);
-        MyFree(ddgMat);
-        goto end;
-    }
-
-    lnormMat = laplacian(wMat, ddgMat, numOfDatapoints);
-    if(goal==lnorm){
-        printMatrix(lnormMat, numOfDatapoints, numOfDatapoints);
-        goto end;
-    }
-
-    eigenvectorsMat = (double **) alloc2DArray(numOfDatapoints, numOfDatapoints, sizeof(double), sizeof(double *), NULL);
-    jacobiAlgorithm(lnormMat, eigenvectorsMat, numOfDatapoints);
-    eigenvalues = sortEigenvalues(lnormMat, numOfDatapoints);
-    freeUsedMem = lnormMat;
-
-    if (k == 0)
-        k = eigengapHeuristicKCalc(eigenvalues, numOfDatapoints);
-    tMat = initTMatrix(eigenvalues, eigenvectorsMat, *freeUsedMem, numOfDatapoints, k);
-
-    clustersArray = kMeans(k, MAX_KMEANS_ITER, k, numOfDatapoints, tMat, NULL);
-    printFinalCentroids(clustersArray, k, k);
-    freeUsedMem = tMat;
-
-    end:
     freeAllMemory();
     return 0;
 }
@@ -222,11 +240,11 @@ double **fitClusteringToOriginData(int k, int dimension, int numOfVectors, doubl
     return originDataCentroids;
 }
 
-void **alloc2DArray(int rows, int cols, size_t basicSize, size_t basicPtrSize, void *freeUsedMem) {
+void **alloc2DArray(int rows, int cols, size_t basicSize, size_t basicPtrSize, void *recycleMemBlock) {
     int i;
     void *blockMem, **matrix;
     /* Reallocate block of memory */
-    blockMem = myAlloc(freeUsedMem, rows * cols * basicSize + rows * basicPtrSize);
+    blockMem = myAlloc(recycleMemBlock, rows * cols * basicSize + rows * basicPtrSize);
     matrix = (void **) ((char *)blockMem + rows * cols * basicSize);
 
     for (i = 0; i < rows; ++i) {
@@ -259,6 +277,8 @@ void *myAlloc(void *usedMem, size_t size) {
            if(blockMemPlusPtr[1] != NULL)
                ((void **)blockMemPlusPtr[1])[0] = blockMemPlusPtr;
        }
+       if (freeUsedMem == usedMem)
+           freeUsedMem = NULL; /* Unfree the memory - used again */
     }
     return blockMem;
 }
@@ -280,31 +300,15 @@ void myFree(void *blockMem) {
 }
 
 void freeAllMemory() {
-    void **cuurBlock = headOfMemList, **nextBlock;
+    void **currBlock = headOfMemList, **nextBlock;
 
-    while (cuurBlock != NULL) {
-        nextBlock = cuurBlock[1];
-        free(cuurBlock);
-        cuurBlock = nextBlock;
+    while (currBlock != NULL) {
+        nextBlock = currBlock[1];
+        free(currBlock);
+        currBlock = nextBlock;
     }
     headOfMemList = NULL;
 }
-
-/*void freeAllMemory(double **vectorsArray, double **originData, Cluster *clustersArray, int k) {
-    int i;
-    *//* Free clusters *//*
-    if (clustersArray != NULL) {
-        for (i = 0; i < k; ++i) {
-            MyFree(clustersArray[i].currCentroid);
-            MyFree(clustersArray[i].prevCentroid);
-        }
-    }
-    MyFree(clustersArray);
-    if (vectorsArray != NULL)
-        MyFree(*vectorsArray);
-    if (originData != NULL)
-        MyFree(*originData);
-}*/
 
 void printMatrix(double **matrix, int rows, int cols) {
     int i, j;
@@ -384,9 +388,9 @@ Cluster *kMeans(int k, int maxIter, int dimension, int numOfVectors, double **ve
     clustersArray = initClusters(vectorsArray, k, dimension, firstCentralIndexes);
 
     for (i = 0; i < maxIter; ++i) {
-        initCurrCentroidAndCounter(clustersArray, &k, &dimension); /* Update curr centroid to prev centroid and reset the counter */
-        assignVectorsToClusters(vectorsArray, clustersArray, &k, &numOfVectors, &dimension);
-        changes = recalcCentroids(clustersArray, &k, &dimension); /* Calculate new centroids */
+        initCurrCentroidAndCounter(clustersArray, k, dimension); /* Update curr centroid to prev centroid and reset the counter */
+        assignVectorsToClusters(vectorsArray, clustersArray, k, numOfVectors, dimension);
+        changes = recalcCentroids(clustersArray, k, dimension); /* Calculate new centroids */
         if (changes == 0) { /* Centroids stay unchanged in the current iteration */
             break;
         }
@@ -421,22 +425,22 @@ Cluster *initClusters(double **vectorsArray, int k, int dimension, int *firstCen
     return clustersArray;
 }
 
-double vectorsNorm(const double *vec1, const double *vec2, const int *dimension) {
+double vectorsNorm(const double *vec1, const double *vec2, int dimension) {
     double norm = 0;
     int i;
-    for (i = 0; i < *dimension; ++i) {
+    for (i = 0; i < dimension; ++i) {
         norm += SQ(vec1[i] - vec2[i]);
     }
     return norm;
 }
 
-int findMyCluster(double *vec, Cluster *clustersArray, const int *k, const int *dimension) {
+int findMyCluster(double *vec, Cluster *clustersArray, int k, int dimension) {
     int myCluster, j;
     double minNorm, norm;
 
     myCluster = 0;
     minNorm = vectorsNorm(vec, clustersArray[0].prevCentroid, dimension);
-    for (j = 1; j < *k; ++j) { /* Find the min norm == the closest cluster */
+    for (j = 1; j < k; ++j) { /* Find the min norm == the closest cluster */
         norm = vectorsNorm(vec, clustersArray[j].prevCentroid, dimension);
         if (norm < minNorm) {
             myCluster = j;
@@ -446,39 +450,38 @@ int findMyCluster(double *vec, Cluster *clustersArray, const int *k, const int *
     return myCluster;
 }
 
-void assignVectorsToClusters(double **vectorsArray, Cluster *clustersArray, const int *k, const int *numOfVectors,
-                             const int *dimension) {
+void assignVectorsToClusters(double **vectorsArray, Cluster *clustersArray, int k, int numOfVectors, int dimension) {
     int i, j, myCluster;
     double *vec;
-    for (i = 0; i < *numOfVectors; ++i) {
+    for (i = 0; i < numOfVectors; ++i) {
         vec = vectorsArray[i];
         myCluster = findMyCluster(vectorsArray[i], clustersArray, k, dimension);
-        vec[*dimension] = myCluster; /* Set vector's cluster to his closest */
-        for (j = 0; j < *dimension; ++j) {
+        vec[dimension] = myCluster; /* Set vector's cluster to his closest */
+        for (j = 0; j < dimension; ++j) {
             clustersArray[myCluster].currCentroid[j] += vec[j]; /* Summation of the vectors Components */
         }
         clustersArray[myCluster].counter++; /* Count the number of vectors for each cluster */
     }
 }
 
-int recalcCentroids(Cluster *clustersArray, const int *k, const int *dimension) {
+int recalcCentroids(Cluster *clustersArray, int k, int dimension) {
     int i, j, changes = 0;
     Cluster cluster;
-    for (i = 0; i < *k; ++i) {
+    for (i = 0; i < k; ++i) {
         cluster = clustersArray[i];
-        for (j = 0; j < *dimension; ++j) {
+        for (j = 0; j < dimension; ++j) {
             cluster.currCentroid[j] /= cluster.counter; /* Calc the mean value */
-            changes += cluster.prevCentroid[j] != cluster.currCentroid[j] ? 1
-                    : 0; /* Count the number of changed centroids' components */
+            /* Count the number of changed centroids' components */
+            changes += cluster.prevCentroid[j] != cluster.currCentroid[j] ? 1: 0;
         }
     }
     return changes;
 }
 
-void initCurrCentroidAndCounter(Cluster *clustersArray, const int *k, const int *dimension) {
+void initCurrCentroidAndCounter(Cluster *clustersArray, int k, int dimension) {
     int i, j;
-    for (i = 0; i < *k; ++i) {
-        for (j = 0; j < *dimension; ++j) {
+    for (i = 0; i < k; ++i) {
+        for (j = 0; j < dimension; ++j) {
             clustersArray[i].prevCentroid[j] = clustersArray[i].currCentroid[j]; /* Set prev centroid to curr centroid */
             clustersArray[i].currCentroid[j] = 0; /* Reset curr centroid */
         }
@@ -507,13 +510,16 @@ void pivotIndex(double **matrix, int n, int *pivotRow, int *pivotCol) {
         *pivotRow = EOF; /* Matrix is diagonal */
 }
 
-void initIdentityMatrix(double **matrix, int n) {
+double **initIdentityMatrix(int n) {
     int i, j;
+    double **matrix = (double **) alloc2DArray(n, n, sizeof(double), sizeof(double *), freeUsedMem);
+
     for (i = 0; i < n; ++i) {
         for (j = 0; j < n; ++j) {
             matrix[i][j] = i == j ? 1.0 : 0.0;
         }
     }
+    return matrix;
 }
 
 double jacobiRotate(double **a, double **v, int n, int i, int j) {
@@ -583,11 +589,11 @@ int cmpEigenvalues (const void *p1, const void *p2) {
     return (q1->vector - q2->vector); /* Keeps qsort comparator stable */
 }
 
-void jacobiAlgorithm(double **matrix, double **eigenvectorsMat, int n) {
-    double diffOffNorm;
+double **jacobiAlgorithm(double **matrix, int n) {
+    double diffOffNorm, **eigenvectorsMat;
     int jacobiIterCounter, pivotRow, pivotCol;
 
-    initIdentityMatrix(eigenvectorsMat, n);
+    eigenvectorsMat = initIdentityMatrix(n);
 
     jacobiIterCounter = 0;
     do {
@@ -597,6 +603,8 @@ void jacobiAlgorithm(double **matrix, double **eigenvectorsMat, int n) {
         diffOffNorm = jacobiRotate(matrix, eigenvectorsMat, n, pivotRow, pivotCol);
         jacobiIterCounter++;
     } while (jacobiIterCounter < MAX_JACOBI_ITER && diffOffNorm >= EPSILON);
+
+    return eigenvectorsMat;
 }
 
 int eigengapHeuristicKCalc(Eigenvalue *eigenvalues, int n) {
@@ -617,7 +625,7 @@ int eigengapHeuristicKCalc(Eigenvalue *eigenvalues, int n) {
     return maxIndex + 1;
 }
 
-double **initTMatrix(Eigenvalue *eigenvalues, double **eigenvectorsMat, void *freeUsedMem, int n, int k) {
+double **initTMatrix(Eigenvalue *eigenvalues, double **eigenvectorsMat, int n, int k) {
     int i, j;
     double sumSqRow, value;
     double **tMat = (double **) alloc2DArray(n, k + 1, sizeof(double), sizeof(double *), freeUsedMem);
@@ -637,12 +645,6 @@ double **initTMatrix(Eigenvalue *eigenvalues, double **eigenvectorsMat, void *fr
             }
         }
     }
-    /* Free memory */
-    MyFree(eigenvalues);
-    if (eigenvectorsMat != NULL) {
-        myFree(*eigenvectorsMat);
-        eigenvectorsMat = NULL;
-    }
     return tMat;
 }
 
@@ -655,14 +657,14 @@ double **initTMatrix(Eigenvalue *eigenvalues, double **eigenvectorsMat, void *fr
  * Using sqrt and norm functions
  * Returns the weighted Matrix
  */
-double **weightedMatrix(double **wMatrix, double **vectorsArray, int numOfVectors, int dimension) {
+double **weightedMatrix(double **vectorsArray, int numOfVectors, int dimension) {
     int i, j;
-    double norm;
+    double norm, **wMatrix = (double **) alloc2DArray(numOfVectors, numOfVectors, sizeof(double), sizeof(double *), freeUsedMem);
 
     for (i = 0; i < numOfVectors; i++) {
         wMatrix[i][i] = 0.0;
         for (j = i + 1; j < numOfVectors; j++) {
-            norm = sqrt(vectorsNorm(vectorsArray[i], vectorsArray[j], &dimension));
+            norm = sqrt(vectorsNorm(vectorsArray[i], vectorsArray[j], dimension));
             wMatrix[i][j] = exp(-0.5 * norm);
             wMatrix[j][i] = wMatrix[i][j];
         }
@@ -707,7 +709,6 @@ double **laplacian(double **wMatrix, double *dMatrix, int numOfVectors) {
                 lMatrix[i][j] += 1.0;
         }
     }
-    MyFree(dMatrix); /* End of need */
     return lMatrix;
 }
 
