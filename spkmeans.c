@@ -1,9 +1,4 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <math.h>
-#include <string.h>
-#include <assert.h>
-#include <ctype.h>
+#include "spkmeans.h"
 
 #define SQ(x) ((x)*(x))
 #define EPSILON 1.0E-15
@@ -13,13 +8,11 @@
 #define REQUIRED_NUM_OF_ARGUMENTS 4
 #define K_ARGUMENT 1
 #define GOAL_ARGUMENT 2
-#define MAX_KMEANS_ITER 300
 #define MAX_DATAPOINTS 50
 #define END_OF_STRING '\0'
 #define PRINT_FORMAT "%.4f"
 #define ERROR_MSG "An Error Has Occurred\n"
 #define INVALID_INPUT_MSG "Invalid Input!\n"
-#define SIZE_OF_VOID_2PTR sizeof(void **)
 
 #define MyAssert(exp) \
 if (!(exp)) {      \
@@ -28,29 +21,6 @@ freeAllMemory();                      \
 assert (0);          \
 exit(EXIT_FAILURE);     \
 }
-
-/* Avoid -0.0000 representation */
-#define NegZero(value) (value) < 0.0 && (value) > -0.00005 ? -(value) : (value)
-
-#define MyFree(block) myFree(block); block = NULL
-#define MyRecycleMatFree(block) freeUsedMem = *block; block = NULL
-
-#define FOREACH_GOAL(GOAL) \
-GOAL(jacobi) \
-GOAL(wam)  \
-GOAL(ddg)   \
-GOAL(lnorm)  \
-GOAL(spk)
-
-#define GENERATE_ENUM(ENUM) ENUM,
-#define GENERATE_STRING(STRING) #STRING,
-
-typedef enum {
-    FOREACH_GOAL(GENERATE_ENUM)
-    NUM_OF_GOALS
-} GOAL;
-
-static const char *GOAL_STRING[] = {FOREACH_GOAL(GENERATE_STRING)};
 
 typedef struct {
     double *prevCentroid;
@@ -63,8 +33,6 @@ typedef struct {
     int vector;
 } Eigenvalue;
 
-double **dataAdjustmentMatrices(double **datapointsArray, GOAL goal, int *k, int dimension, int numOfDatapoints);
-double **kMeans(int k, int maxIter, int dimension, int numOfVectors, double **vectorsArray, const int *firstCentralIndexes);
 Cluster *initClusters(double **vectorsArray, int k, int dimension, const int *firstCentralIndexes);
 double **buildFinalCentroidsMat(Cluster *clustersArray, double *vecToClusterLabeling, int k, int dimension);
 double vectorsNorm(const double *vec1, const double *vec2, int dimension); /* Calculate the norm between 2 vectors */
@@ -72,13 +40,9 @@ int findMyCluster(double *vec, Cluster *clustersArray, int k, int dimension); /*
 void assignVectorsToClusters(double **vectorsArray, Cluster *clustersArray, double *vecToClusterLabeling, int k, int numOfVectors, int dimension);  /* For any vector assign to his closest cluster */
 int recalcCentroids(Cluster *clustersArray, int k, int dimension); /* Recalculate clusters' centroids, return number of changes */
 void initCurrCentroidAndCounter(Cluster *clustersArray, int k, int dimension); /* Set curr centroid to prev centroid and reset the counter */
-void freeAllMemory(); /* Free the allocated memory */
-double **jacobiAlgorithm(double **matrix, int n);
 double jacobiRotate(double **a, double **v, int n, int i, int j);
 double **initIdentityMatrix(int n);
 int eigengapHeuristicKCalc(Eigenvalue *eigenvalues, int n);
-void **alloc2DArray(int rows, int cols, size_t basicSize, size_t basicPtrSize, void *recycleMemBlock);
-void *myAlloc(void *usedMem, size_t size);
 void printMatrix(double **matrix, int rows, int cols);
 void validateAndAssignInput(int argc, char **argv, int *k, GOAL *goal, char **filenamePtr);
 double **readDataFromFile(int *rows, int *cols, char *fileName, GOAL goal);
@@ -91,11 +55,6 @@ Eigenvalue *sortEigenvalues(double **a, int n);
 int cmpEigenvalues (const void *p1, const void *p2);
 void pivotIndex(double **matrix, int n, int *pivotRow, int *pivotCol);
 void printJacobi(double **a, double **v, int n);
-GOAL str2enum(char *str);
-void myFree(void *blockMem);
-
-void **headOfMemList;
-void *freeUsedMem;
 
 /**********************************
 *********** Main ******************
@@ -112,32 +71,31 @@ int main(int argc, char *argv[]) {
     datapointsArray = readDataFromFile(&numOfDatapoints, &dimension, filename, goal);
     if (goal == spk && k >= numOfDatapoints) {
         printf(INVALID_INPUT_MSG);
-        return 0;
-    }
-
-    if (goal == jacobi) {
-        calcMat = jacobiAlgorithm(datapointsArray, numOfDatapoints);
     } else {
-        calcMat = dataAdjustmentMatrices(datapointsArray, goal, &k, dimension, numOfDatapoints);
-        MyRecycleMatFree(datapointsArray);
-    }
+        if (goal == jacobi) {
+            calcMat = jacobiAlgorithm(datapointsArray, numOfDatapoints);
+        } else {
+            calcMat = dataAdjustmentMatrices(datapointsArray, goal, &k, dimension, numOfDatapoints);
+            MyRecycleMatFree(datapointsArray);
+        }
 
-    /* Print results */
-    switch (goal) {
-        case jacobi:
-            printJacobi(datapointsArray, calcMat, numOfDatapoints);
-            break;
-        case wam:
-        case ddg:
-        case lnorm:
-            printMatrix(calcMat, numOfDatapoints, numOfDatapoints);
-            break;
-        case spk:
-            calcMat = kMeans(k, MAX_KMEANS_ITER, k, numOfDatapoints, calcMat, NULL);
-            printMatrix(calcMat, k, k);
-            break;
-        default:
-            break; /* TODO exit prog? */
+        /* Print results */
+        switch (goal) {
+            case jacobi:
+                printJacobi(datapointsArray, calcMat, numOfDatapoints);
+                break;
+            case wam:
+            case ddg:
+            case lnorm:
+                printMatrix(calcMat, numOfDatapoints, numOfDatapoints);
+                break;
+            case spk:
+                calcMat = kMeans(calcMat, numOfDatapoints, k, k, NULL, MAX_KMEANS_ITER);
+                printMatrix(calcMat, k, k);
+                break;
+            default:
+                break; /* TODO exit prog? */
+        }
     }
 
     freeAllMemory();
@@ -164,7 +122,7 @@ double **dataAdjustmentMatrices(double **datapointsArray, GOAL goal, int *k, int
         return ddgMat;
     /* The Normalized Graph Laplacian - step 2 */
     lnormMat = laplacian(wMat, ddgMat, numOfDatapoints);
-    if (task++ == goal)
+    if (task == goal)
         return lnormMat;
     MyRecycleMatFree(ddgMat);
     /* Determine k and obtain the first k eigenvectors using Jacobi algorithm - step 3 */
@@ -288,12 +246,12 @@ int eigengapHeuristicKCalc(Eigenvalue *eigenvalues, int n) {
 ******** Memory Allocation ******
 **********************************/
 
-void *myAlloc(void *usedMem, size_t size) {
-    void *effectiveUsedMem = usedMem != NULL ? (void *)((char *)usedMem - SIZE_OF_VOID_2PTR * 2) : NULL;
-    void *blockMem, **blockMemPlusPtr = (void **)realloc(effectiveUsedMem, size + SIZE_OF_VOID_2PTR * 2);
+void *myAlloc(void *effectiveUsedMem, size_t size) {
+    void *usedMem = effectiveUsedMem != NULL ? (void *)((char *)effectiveUsedMem - SIZE_OF_VOID_2PTR * 2) : NULL;
+    void *blockMem, **blockMemPlusPtr = (void **)realloc(usedMem, size + SIZE_OF_VOID_2PTR * 2);
     MyAssert(blockMemPlusPtr != NULL);
     blockMem = (void *)((char *)blockMemPlusPtr + SIZE_OF_VOID_2PTR * 2);
-    if (usedMem == NULL) { /* New Allocation */
+    if (effectiveUsedMem == NULL) { /* New Allocation */
         /* Set ptr to the prev/next dynamic allocated memory block */
         blockMemPlusPtr[0] = NULL;
         if (headOfMemList != NULL) {
@@ -303,7 +261,7 @@ void *myAlloc(void *usedMem, size_t size) {
             blockMemPlusPtr[1] = NULL;
         headOfMemList = blockMemPlusPtr;
     } else {
-        if (effectiveUsedMem != blockMemPlusPtr) {
+        if (usedMem != blockMemPlusPtr) {
             if (blockMemPlusPtr[0] != NULL)
                 ((void **)blockMemPlusPtr[0])[1] = blockMemPlusPtr;
             else
@@ -311,7 +269,7 @@ void *myAlloc(void *usedMem, size_t size) {
             if(blockMemPlusPtr[1] != NULL)
                 ((void **)blockMemPlusPtr[1])[0] = blockMemPlusPtr;
         }
-        if (freeUsedMem == usedMem)
+        if (freeUsedMem == effectiveUsedMem)
             freeUsedMem = NULL; /* Unfree the memory - used again */
     }
     return blockMem;
@@ -331,20 +289,20 @@ void **alloc2DArray(int rows, int cols, size_t basicSize, size_t basicPtrSize, v
     return matrix;
 }
 
-void myFree(void *blockMem) {
-    void **effectiveBlockMem;
-    if (blockMem == NULL)
+void myFree(void *effectiveBlockMem) {
+    void **blockMem;
+    if (effectiveBlockMem == NULL)
         return;
-    effectiveBlockMem = (void **)((char *)blockMem - SIZE_OF_VOID_2PTR * 2);
-    if(effectiveBlockMem[0] != NULL) {
-        ((void **)effectiveBlockMem[0])[1] = effectiveBlockMem[1]; /* Set prev's next to current next */
+    blockMem = (void **)((char *)effectiveBlockMem - SIZE_OF_VOID_2PTR * 2);
+    if(blockMem[0] != NULL) {
+        ((void **)blockMem[0])[1] = blockMem[1]; /* Set prev's next to current next */
     } else {
-        headOfMemList = effectiveBlockMem[1];
+        headOfMemList = blockMem[1];
     }
-    if(effectiveBlockMem[1] != NULL) {
-        ((void **)effectiveBlockMem[1])[0] = effectiveBlockMem[0]; /* Set next's prev to current prev */
+    if(blockMem[1] != NULL) {
+        ((void **)blockMem[1])[0] = blockMem[0]; /* Set next's prev to current prev */
     }
-    free(effectiveBlockMem);
+    free(blockMem);
 }
 
 void freeAllMemory() {
@@ -397,7 +355,7 @@ void printJacobi(double **a, double **v, int n) {
 *********** kMeans Algorithm *********
 *************************************/
 
-double **kMeans(int k, int maxIter, int dimension, int numOfVectors, double **vectorsArray, const int *firstCentralIndexes) {
+double **kMeans(double **vectorsArray, int numOfVectors, int dimension, int k, const int *firstCentralIndexes, int maxIter) {
     int i, changes;
     Cluster *clustersArray;
     double *vecToClusterLabeling, **finalCentroidsAndVecLabeling;

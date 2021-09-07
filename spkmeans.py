@@ -1,15 +1,10 @@
 import sys
 import numpy as np
-import csv
-import timeit
-import pandas as pd
-#  import spkmeans
+import spkmeans as spk
 
-DEFAULT_ITER = 300
 MIN_ARGUMENTS = 3
 INVALID_INPUT_MSG = "Invalid Input!"
 ERROR_MSG = "An Error Has Occured"
-SECOND_FILE_INDEX_IN_ARGV = 3
 COMMA = ','
 GOALS = ["spk", "jacobi", "wam", "ddg", "lnorm"]
 
@@ -19,6 +14,22 @@ GOALS = ["spk", "jacobi", "wam", "ddg", "lnorm"]
 def main():
     k, goal, file = validate_and_assign_input_user()
     list_of_vectors = build_vectors_list(file)
+    number_of_vectors = len(list_of_vectors)
+    dimensions = len(list_of_vectors[0])
+    if k >= number_of_vectors:
+        print(INVALID_INPUT_MSG)
+        exit()  # End program k >= n
+    if goal != "jacobi":
+        calc_matrix = spk.calc_mat(list_of_vectors, goal, k, dimensions, number_of_vectors)
+        if goal == "spk":
+            if k == 0:
+                k = len(calc_matrix[0])
+            list_random_init_centrals_indexes = choose_random_centrals(calc_matrix, k)
+            calc_matrix, vec_to_cluster_labeling = spk.kmeans(calc_matrix, number_of_vectors, k, k, list_random_init_centrals_indexes)
+        print_matrix(calc_matrix)
+    else:
+        eigen_matrix, eigen_values = spk.jacobi(list_of_vectors, number_of_vectors)
+        print_matrix(eigen_matrix.insert(0, eigen_values))
 
 
 # validates the users input (amount of arguments, receiving int when needed) and assigns it to its character
@@ -52,8 +63,10 @@ def build_vectors_list(file):
 # Returns a list of clusters first central indexes
 # Function uses the distances from a vector to the closest central
 #   to pick the next central with random.choice with a probability by that distance
-def choose_random_centrals(np_of_vectors, k, num_of_vectors):
+def choose_random_centrals(list_of_vectors, k):
     np.random.seed(0)
+    num_of_vectors = len(list_of_vectors)
+    np_of_vectors = np.array(list_of_vectors)
     list_random_init_centrals_indexes = [np.random.choice(num_of_vectors)]
     for i in range(k - 1):
         np_subtract = np_of_vectors - np_of_vectors[list_random_init_centrals_indexes[i]]
@@ -65,10 +78,15 @@ def choose_random_centrals(np_of_vectors, k, num_of_vectors):
 
 
 # prints new central after adjusting for the relevant structure
-def print_centrals(final_centroids_list):
-    np_centroids = np.round(final_centroids_list, decimals=4)
-    for central in np_centroids:
-        print(*central, sep=COMMA)
+def print_matrix(final_centroids_list):
+    for central in final_centroids_list:
+        print(*[f"{neg_zero(x):.4f}" for x in central], sep=COMMA)
+
+
+def neg_zero(x):
+    if -0.00005 < x < 0:
+        return -x
+    return x
 
 
 if __name__ == '__main__':
