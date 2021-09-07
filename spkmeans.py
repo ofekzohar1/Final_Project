@@ -29,7 +29,7 @@ def main():
         print_matrix(calc_matrix)
     else:
         eigen_matrix, eigen_values = spk.jacobi(list_of_vectors, number_of_vectors)
-        print_matrix(eigen_matrix.insert(0, eigen_values))
+        print_matrix([eigen_values] + eigen_matrix)
 
 
 # validates the users input (amount of arguments, receiving int when needed) and assigns it to its character
