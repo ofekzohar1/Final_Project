@@ -47,4 +47,4 @@ void myFree(void *effectiveBlockMem);
 void *myAlloc(void *effectiveUsedMem, size_t size);
 void **alloc2DArray(int rows, int cols, size_t basicSize, size_t basicPtrSize, void *recycleMemBlock);
 void freeAllMemory(); /* Free the allocated memory */
-#endif //FINAL_PROJECT_SPKMEANS_H
+#endif /*FINAL_PROJECT_SPKMEANS_H */
