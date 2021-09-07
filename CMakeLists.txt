@@ -5,5 +5,5 @@ set(CMAKE_C_STANDARD 90)
 find_package(PythonLibs REQUIRED)
 include_directories(${PYTHON_INCLUDE_DIRS})
 
-add_executable(Final_Project spkmeans.c spkmeans.h)
+add_executable(Final_Project spkmeans.c)
 target_link_libraries(Final_Project ${PYTHON_LIBRARIES})
