@@ -26,6 +26,7 @@ def main():
                 k = len(calc_matrix[0])
             list_random_init_centrals_indexes = choose_random_centrals(calc_matrix, k)
             calc_matrix, vec_to_cluster_labeling = spk.kmeans(calc_matrix, number_of_vectors, k, k, list_random_init_centrals_indexes)
+            print(*list_random_init_centrals_indexes, sep=COMMA)
         print_matrix(calc_matrix)
     else:
         eigen_matrix, eigen_values = spk.jacobi(list_of_vectors, number_of_vectors)
@@ -77,9 +78,9 @@ def choose_random_centrals(list_of_vectors, k):
     return list_random_init_centrals_indexes
 
 
-# prints new central after adjusting for the relevant structure
-def print_matrix(final_centroids_list):
-    for central in final_centroids_list:
+#
+def print_matrix(matrix):
+    for central in matrix:
         print(*[f"{neg_zero(x):.4f}" for x in central], sep=COMMA)
 
 
