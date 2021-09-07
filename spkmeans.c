@@ -78,6 +78,7 @@ int main(int argc, char *argv[]) {
             calcMat = dataAdjustmentMatrices(datapointsArray, goal, &k, dimension, numOfDatapoints);
             MyRecycleMatFree(datapointsArray);
         }
+        MyAssert(calcMat != NULL);
 
         /* Print results */
         switch (goal) {
@@ -91,6 +92,7 @@ int main(int argc, char *argv[]) {
                 break;
             case spk:
                 calcMat = kMeans(calcMat, numOfDatapoints, k, k, NULL, MAX_KMEANS_ITER);
+                MyAssert(calcMat != NULL);
                 printMatrix(calcMat, k, k);
                 break;
             default:
@@ -114,20 +116,21 @@ double **dataAdjustmentMatrices(double **datapointsArray, GOAL goal, int *k, int
     task = wam;
     /* The Weighted Adjacency Matrix - step 1.1.1 */
     wMat = weightedMatrix(datapointsArray, numOfDatapoints, dimension);
-    if (task++ == goal)
+    if (task++ == goal || wMat == NULL)
         return wMat;
-    /* The Diagonal Degree Matrix - step 1.1.2 */\
+    /* The Diagonal Degree Matrix - step 1.1.2 */
     ddgMat = dMatrix(wMat, numOfDatapoints);
-    if (task++ == goal)
+    if (task++ == goal || ddgMat == NULL)
         return ddgMat;
     /* The Normalized Graph Laplacian - step 2 */
     lnormMat = laplacian(wMat, ddgMat, numOfDatapoints);
-    if (task == goal)
+    if (task == goal || lnormMat == NULL)
         return lnormMat;
     MyRecycleMatFree(ddgMat);
     /* Determine k and obtain the first k eigenvectors using Jacobi algorithm - step 3 */
     eigenvectorsMat = jacobiAlgorithm(lnormMat, numOfDatapoints);
     eigenvalues = sortEigenvalues(lnormMat, numOfDatapoints);
+    if (eigenvectorsMat == NULL || eigenvalues == NULL) return NULL;
     MyRecycleMatFree(lnormMat);
     if (*k == 0)
         *k = eigengapHeuristicKCalc(eigenvalues, numOfDatapoints);
@@ -149,12 +152,14 @@ double **weightedMatrix(double **vectorsArray, int numOfVectors, int dimension) 
     int i, j;
     double norm, **wMatrix = (double **) alloc2DArray(numOfVectors, numOfVectors, sizeof(double), sizeof(double *), freeUsedMem);
 
-    for (i = 0; i < numOfVectors; i++) {
-        wMatrix[i][i] = 0.0;
-        for (j = i + 1; j < numOfVectors; j++) {
-            norm = sqrt(vectorsNorm(vectorsArray[i], vectorsArray[j], dimension));
-            wMatrix[i][j] = exp(-0.5 * norm);
-            wMatrix[j][i] = wMatrix[i][j];
+    if (wMatrix != NULL) {
+        for (i = 0; i < numOfVectors; i++) {
+            wMatrix[i][i] = 0.0;
+            for (j = i + 1; j < numOfVectors; j++) {
+                norm = sqrt(vectorsNorm(vectorsArray[i], vectorsArray[j], dimension));
+                wMatrix[i][j] = exp(-0.5 * norm);
+                wMatrix[j][i] = wMatrix[i][j];
+            }
         }
     }
     return wMatrix;
@@ -169,13 +174,15 @@ double **dMatrix(double **wMatrix, int n) {
     double **dMatrix, sum;
     dMatrix = (double **) alloc2DArray(n, n, sizeof(double), sizeof(double *), freeUsedMem);
 
-    for (i = 0; i < n; i++) {
-        sum = 0.0;
-        for (j = 0; j < n; j++) {
-            dMatrix[i][j] = 0.0;
-            sum += wMatrix[i][j];
+    if (dMatrix != NULL) {
+        for (i = 0; i < n; i++) {
+            sum = 0.0;
+            for (j = 0; j < n; j++) {
+                dMatrix[i][j] = 0.0;
+                sum += wMatrix[i][j];
+            }
+            dMatrix[i][i] = sum;
         }
-        dMatrix[i][i] = sum;
     }
     return dMatrix;
 }
@@ -206,18 +213,20 @@ double **initTMatrix(Eigenvalue *eigenvalues, double **eigenvectorsMat, int n, i
     double sumSqRow, value;
     double **tMat = (double **) alloc2DArray(n, k + 1, sizeof(double), sizeof(double *), freeUsedMem);
 
-    for (i = 0; i < n; ++i) {
-        sumSqRow = 0.0;
-        tMat[i][k] = 0.0; /* Cluster ID */
-        for (j = 0; j < k; ++j) {
-            value = eigenvectorsMat[eigenvalues[j].vector][i];
-            tMat[i][j] = value;
-            sumSqRow += SQ(value);
-        }
-        if (sumSqRow != 0.0) { /* TODO check about zero line */
-            sumSqRow = 1.0 / sqrt(sumSqRow);
+    if (tMat != NULL) {
+        for (i = 0; i < n; ++i) {
+            sumSqRow = 0.0;
+            tMat[i][k] = 0.0; /* Cluster ID */
             for (j = 0; j < k; ++j) {
-                tMat[i][j] *= sumSqRow;
+                value = eigenvectorsMat[eigenvalues[j].vector][i];
+                tMat[i][j] = value;
+                sumSqRow += SQ(value);
+            }
+            if (sumSqRow != 0.0) { /* TODO check about zero line */
+                sumSqRow = 1.0 / sqrt(sumSqRow);
+                for (j = 0; j < k; ++j) {
+                    tMat[i][j] *= sumSqRow;
+                }
             }
         }
     }
@@ -249,7 +258,8 @@ int eigengapHeuristicKCalc(Eigenvalue *eigenvalues, int n) {
 void *myAlloc(void *effectiveUsedMem, size_t size) {
     void *usedMem = effectiveUsedMem != NULL ? (void *)((char *)effectiveUsedMem - SIZE_OF_VOID_2PTR * 2) : NULL;
     void *blockMem, **blockMemPlusPtr = (void **)realloc(usedMem, size + SIZE_OF_VOID_2PTR * 2);
-    MyAssert(blockMemPlusPtr != NULL);
+    if(blockMemPlusPtr == NULL) return NULL;
+
     blockMem = (void *)((char *)blockMemPlusPtr + SIZE_OF_VOID_2PTR * 2);
     if (effectiveUsedMem == NULL) { /* New Allocation */
         /* Set ptr to the prev/next dynamic allocated memory block */
@@ -280,6 +290,7 @@ void **alloc2DArray(int rows, int cols, size_t basicSize, size_t basicPtrSize, v
     void *blockMem, **matrix;
     /* Reallocate block of memory */
     blockMem = myAlloc(recycleMemBlock, rows * cols * basicSize + rows * basicPtrSize);
+    if (blockMem == NULL) return NULL;
     matrix = (void **) ((char *)blockMem + rows * cols * basicSize);
 
     for (i = 0; i < rows; ++i) {
@@ -363,6 +374,7 @@ double **kMeans(double **vectorsArray, int numOfVectors, int dimension, int k, c
     /* Initialize clusters arrays */
     clustersArray = initClusters(vectorsArray, k, dimension, firstCentralIndexes);
     vecToClusterLabeling = (double *) myAlloc(freeUsedMem, numOfVectors * sizeof(double));
+    if (vecToClusterLabeling == NULL || clustersArray == NULL) return NULL;
 
     for (i = 0; i < maxIter; ++i) {
         initCurrCentroidAndCounter(clustersArray, k, dimension); /* Update curr centroid to prev centroid and reset the counter */
@@ -384,6 +396,7 @@ Cluster *initClusters(double **vectorsArray, int k, int dimension, const int *fi
     /* Allocate memory for clustersArray */
     clustersArray = (Cluster *) myAlloc(NULL, k * sizeof(Cluster));
     centroidMat = (double **) alloc2DArray(k + 1, dimension * 2, sizeof(double), sizeof(double *), freeUsedMem);
+    if (clustersArray == NULL || centroidMat == NULL) return NULL;
 
     for (i = 0; i < k; ++i) {
         clustersArray[i].counter = 0;
@@ -485,15 +498,16 @@ double **jacobiAlgorithm(double **matrix, int n) {
 
     eigenvectorsMat = initIdentityMatrix(n);
 
-    jacobiIterCounter = 0;
-    do {
-        pivotIndex(matrix, n, &pivotRow, &pivotCol);
-        if (pivotRow == EOF) /* Matrix is already diagonal */
-            break;
-        diffOffNorm = jacobiRotate(matrix, eigenvectorsMat, n, pivotRow, pivotCol);
-        jacobiIterCounter++;
-    } while (jacobiIterCounter < MAX_JACOBI_ITER && diffOffNorm >= EPSILON);
-
+    if (eigenvectorsMat != NULL) {
+        jacobiIterCounter = 0;
+        do {
+            pivotIndex(matrix, n, &pivotRow, &pivotCol);
+            if (pivotRow == EOF) /* Matrix is already diagonal */
+                break;
+            diffOffNorm = jacobiRotate(matrix, eigenvectorsMat, n, pivotRow, pivotCol);
+            jacobiIterCounter++;
+        } while (jacobiIterCounter < MAX_JACOBI_ITER && diffOffNorm >= EPSILON);
+    }
     return eigenvectorsMat;
 }
 
@@ -562,9 +576,11 @@ double **initIdentityMatrix(int n) {
     int i, j;
     double **matrix = (double **) alloc2DArray(n, n, sizeof(double), sizeof(double *), freeUsedMem);
 
-    for (i = 0; i < n; ++i) {
-        for (j = 0; j < n; ++j) {
-            matrix[i][j] = i == j ? 1.0 : 0.0;
+    if (matrix != NULL) {
+        for (i = 0; i < n; ++i) {
+            for (j = 0; j < n; ++j) {
+                matrix[i][j] = i == j ? 1.0 : 0.0;
+            }
         }
     }
     return matrix;
@@ -574,12 +590,14 @@ Eigenvalue *sortEigenvalues(double **a, int n) {
     int i;
     Eigenvalue *eigenvalues = myAlloc(NULL, n * sizeof(Eigenvalue));
 
-    for(i = 0; i < n; ++i) {
-        eigenvalues[i].value = a[i][i];
-        eigenvalues[i].vector = i;
-    }
+    if (eigenvalues != NULL) {
+        for (i = 0; i < n; ++i) {
+            eigenvalues[i].value = a[i][i];
+            eigenvalues[i].vector = i;
+        }
 
-    qsort(eigenvalues, n, sizeof(Eigenvalue), cmpEigenvalues);
+        qsort(eigenvalues, n, sizeof(Eigenvalue), cmpEigenvalues);
+    }
     return eigenvalues;
 }
 
@@ -643,6 +661,7 @@ double **readDataFromFile(int *rows, int *cols, char *fileName, GOAL goal) {
 
     maxLen = goal != jacobi ? MAX_FEATURES : MAX_DATAPOINTS;
     dataBlock = (double *) myAlloc(NULL, maxLen * sizeof(double));
+    MyAssert(dataBlock != NULL);
     file = fopen(fileName, "r");
     MyAssert(file != NULL);
     calcDim(cols, file, dataBlock);
@@ -650,6 +669,7 @@ double **readDataFromFile(int *rows, int *cols, char *fileName, GOAL goal) {
     maxLen = goal != jacobi ? MAX_DATAPOINTS : *cols;
     /* Reallocate memory to hold the data */
     dataBlock = (double *) myAlloc(dataBlock ,maxLen * (*cols) * sizeof(double));
+    MyAssert(dataBlock != NULL);
 
     counter = *cols;
     while (fscanf(file, "%lf%c", &value, &c) != EOF) {
@@ -659,6 +679,7 @@ double **readDataFromFile(int *rows, int *cols, char *fileName, GOAL goal) {
 
     *rows = counter / *cols;
     matrix = (double **) alloc2DArray(*rows, *cols, sizeof(double), sizeof(double *), dataBlock);
+    MyAssert(matrix != NULL);
     return matrix;
 }
 

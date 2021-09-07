@@ -2,16 +2,10 @@
 #include <Python.h>
 #include "spkmeans.h"
 
-/* TODO handle errors in c api */
-/* Custom made python type error */
-#define MyPy_TypeErr(x, y) \
-PyErr_Format(PyExc_TypeError, "%s type is required (got type %s)", x ,Py_TYPE(y)->tp_name) \
-
 #define MyAssert(exp) \
-if (!(exp)) {      \
+if (!(exp)) {         \
 freeAllMemory();                      \
-assert (0);          \
-exit(EXIT_FAILURE);     \
+return NULL;   \
 }
 
 /* Functions declaration */
@@ -82,13 +76,15 @@ static PyObject *calc_mat_connect(PyObject *self, PyObject *args) {
     GOAL goal;
     headOfMemList= NULL, freeUsedMem = NULL;
 
-    if (!PyArg_ParseTuple(args, "Osiii",&pyListOfLists, &strGoal, &k, &dimension, &numOfDatapoints))
-        return NULL; /* Type error - not in correct format */
+    MyAssert(PyArg_ParseTuple(args, "Osiii",&pyListOfLists, &strGoal, &k, &dimension, &numOfDatapoints));
+    /* Type error - not in correct format */
+
     goal = str2enum(strGoal);
+    MyAssert(goal != NUM_OF_GOALS); /* Valid goal */
     datapointsArray = pyLOLToCMat(pyListOfLists, numOfDatapoints, dimension);
-    if (datapointsArray == NULL)
-        return NULL; /* Error */
+    MyAssert(datapointsArray != NULL);
     calcMat = dataAdjustmentMatrices(datapointsArray, goal, &k, dimension, numOfDatapoints);
+    MyAssert(calcMat != NULL);
     if (goal == spk)
         cols = k;
     else
@@ -105,14 +101,16 @@ static PyObject *kmeans_connect(PyObject *self, PyObject *args) {
     double **datapointsArray, **calcMat;
     headOfMemList= NULL, freeUsedMem = NULL;
 
-    if (!PyArg_ParseTuple(args, "OiiiO",&pyListOfLists, &numOfDatapoints, &dimension, &k, &pyListOfIndexes))
-        return NULL; /* Type error - not in correct format */
+    MyAssert(PyArg_ParseTuple(args, "OiiiO",&pyListOfLists, &numOfDatapoints, &dimension, &k, &pyListOfIndexes));
+    /* Type error - not in correct format */
+
     datapointsArray = pyLOLToCMat(pyListOfLists, numOfDatapoints, dimension);
     firstCentralIndexes = pyIntListToCArray(pyListOfIndexes, k);
-    if (datapointsArray == NULL || firstCentralIndexes == NULL)
-        return NULL; /* Error */
+    MyAssert(datapointsArray != NULL && firstCentralIndexes != NULL);
     calcMat = kMeans(datapointsArray, numOfDatapoints, dimension, k, firstCentralIndexes, MAX_KMEANS_ITER);
+    MyAssert(calcMat != NULL);
     pyResult = kmeansResToPyObject(calcMat, k, dimension, numOfDatapoints);
+
     freeAllMemory();
     return pyResult;
 }
@@ -123,12 +121,11 @@ static PyObject *jacobi_connect(PyObject *self, PyObject *args) {
     double **eigenvectorsMat, **matrix;
     headOfMemList= NULL, freeUsedMem = NULL;
 
-    if (!PyArg_ParseTuple(args, "Oi", &pyListOfLists, &n))
-        return NULL; /* Type error - not in correct format */
+    MyAssert(PyArg_ParseTuple(args, "Oi", &pyListOfLists, &n));
     matrix = pyLOLToCMat(pyListOfLists, n, n);
-    if (matrix == NULL)
-        return NULL;
+    MyAssert(matrix != NULL);
     eigenvectorsMat = jacobiAlgorithm(matrix, n);
+    MyAssert(eigenvectorsMat != NULL);
     for (i = 1; i < n; ++i) {
         matrix[0][i] = matrix[i][i];
     }
@@ -143,13 +140,14 @@ int *pyIntListToCArray(PyObject *pyIntList, int len) {
     int *array, value;
 
     array = (int *) myAlloc(freeUsedMem, len * sizeof(int));
-    MyAssert(array != NULL);
-    for (i = 0; i < len; ++i) {
-        value = (int)PyLong_AsLong(PyList_GetItem(pyIntList, i));
-        if (PyErr_Occurred()) {
-            return NULL; /* Casting error to int */
+    if (array != NULL) {
+        for (i = 0; i < len; ++i) {
+            value = (int) PyLong_AsLong(PyList_GetItem(pyIntList, i));
+            if (PyErr_Occurred()) {
+                return NULL; /* Casting error to int */
+            }
+            array[i] = value;
         }
-        array[i] = value;
     }
     return array;
 }
@@ -158,15 +156,15 @@ PyObject *cArrToPythonList(double *array, int len) {
     Py_ssize_t i;
     PyObject *pyList, *pyValue;
     pyList = PyList_New(len);
-    MyAssert(pyList != NULL);
-    for (i = 0; i < len; ++i) {
+    if(pyList != NULL) {
+        for (i = 0; i < len; ++i) {
             pyValue = PyFloat_FromDouble(array[i]);
             if (pyValue == NULL || PyList_SetItem(pyList, i, pyValue)) {
                 Py_DecRef(pyList);
-                Py_XDECREF(pyValue);
                 return NULL; /* Set error */
             }
         }
+    }
     return pyList;
 }
 
@@ -175,24 +173,19 @@ double **pyLOLToCMat(PyObject *pyListOfLists, int rows, int cols) {
     double **matrix, value;
     PyObject *pyList, *pyValue;
 
-    if (!PyList_Check(pyListOfLists))
-        return NULL;
-    /* Allocate memory for vectorsArrayPtr */
+    MyAssert(PyList_Check(pyListOfLists)); /* Is a list */
+    /* Allocate memory for matrix */
     matrix = (double **) alloc2DArray(rows, cols, sizeof(double), sizeof(double *), freeUsedMem);
-
-    for (i = 0; i < rows; ++i) {
-        pyList = PyList_GetItem(pyListOfLists, i);
-        if (!PyList_Check(pyList)) {
-            /* TODO */
-            return NULL;
-        }
-        for (j = 0; j < cols; ++j) {
-            pyValue = PyList_GetItem(pyList, j);
-            value = PyFloat_AsDouble(pyValue);
-            if (PyErr_Occurred()) {
-                return NULL;
+    if (matrix != NULL) {
+        for (i = 0; i < rows; ++i) {
+            pyList = PyList_GetItem(pyListOfLists, i);
+            MyAssert(PyList_Check(pyList)); /* Is a list */
+            for (j = 0; j < cols; ++j) {
+                pyValue = PyList_GetItem(pyList, j);
+                value = PyFloat_AsDouble(pyValue);
+                MyAssert(!PyErr_Occurred()); /* Check for an error */
+                matrix[i][j] = value;
             }
-            matrix[i][j] = value;
         }
     }
     return matrix;
@@ -202,28 +195,27 @@ PyObject *cMatToPyLOL(double **matrix, int rows, int cols) {
     Py_ssize_t i, j;
     PyObject *pyLOL, *pyList, *pyValue;
     pyLOL = PyList_New(rows);
-    MyAssert(pyLOL != NULL);
+    if(pyLOL != NULL) {
         for (i = 0; i < rows; ++i) {
             pyList = PyList_New(cols);
             if (pyList == NULL) {
                 Py_DecRef(pyLOL);
-                return NULL; /* If NULL alloc fail */
+                return NULL; /* If NULL - alloc fail */
             }
             for (j = 0; j < cols; ++j) {
                 pyValue = PyFloat_FromDouble(matrix[i][j]);
                 if (pyValue == NULL || PyList_SetItem(pyList, j, pyValue)) {
                     Py_DecRef(pyLOL);
                     Py_DecRef(pyList);
-                    Py_XDECREF(pyValue);
                     return NULL; /* Set error */
                 }
             }
             if (PyList_SetItem(pyLOL, i, pyList)) {
                 Py_DecRef(pyLOL);
-                Py_DecRef(pyList);
                 return NULL; /* Set error */
             }
         }
+    }
     return pyLOL;
 }
 
@@ -233,7 +225,7 @@ PyObject *kmeansResToPyObject(double **matrix, int rows, int cols, int numOfData
     pyCentroidsMat = cMatToPyLOL(matrix, rows, cols);
     pyVecLabeling = cArrToPythonList(matrix[rows], numOfDatapoints);
     if (pyCentroidsMat == NULL || pyVecLabeling == NULL)
-        return NULL;
+        return NULL; /* Error */
 
     return PyTuple_Pack(2, pyCentroidsMat, pyVecLabeling);
 }
@@ -244,7 +236,7 @@ PyObject *jacobiResToPyObject(double **eigenvectorsMat, double *eigenvalues, int
     pyEigenvectorsMat = cMatToPyLOL(eigenvectorsMat, n, n);
     pyEigenvalues = cArrToPythonList(eigenvalues, n);
     if (pyEigenvectorsMat == NULL || pyEigenvalues == NULL)
-        return NULL;
+        return NULL; /* Error */
 
     return PyTuple_Pack(2, pyEigenvectorsMat, pyEigenvalues);
 }

@@ -19,18 +19,22 @@ def main():
     if k >= number_of_vectors:
         print(INVALID_INPUT_MSG)
         exit()  # End program k >= n
-    if goal != "jacobi":
-        calc_matrix = spk.calc_mat(list_of_vectors, goal, k, dimensions, number_of_vectors)
-        if goal == "spk":
-            if k == 0:
-                k = len(calc_matrix[0])
-            list_random_init_centrals_indexes = choose_random_centrals(calc_matrix, k)
-            calc_matrix, vec_to_cluster_labeling = spk.kmeans(calc_matrix, number_of_vectors, k, k, list_random_init_centrals_indexes)
-            print(*list_random_init_centrals_indexes, sep=COMMA)
-        print_matrix(calc_matrix)
-    else:
-        eigen_matrix, eigen_values = spk.jacobi(list_of_vectors, number_of_vectors)
-        print_matrix([eigen_values] + eigen_matrix)
+    try:
+        if goal != "jacobi":
+            calc_matrix = spk.calc_mat(list_of_vectors, goal, k, dimensions, number_of_vectors)
+            if goal == "spk":
+                if k == 0:
+                    k = len(calc_matrix[0])
+                list_random_init_centrals_indexes = choose_random_centrals(calc_matrix, k)
+                calc_matrix, vec_to_cluster_labeling = spk.kmeans(calc_matrix, number_of_vectors, k, k, list_random_init_centrals_indexes)
+                print(*list_random_init_centrals_indexes, sep=COMMA)
+            print_matrix(calc_matrix)
+        else:
+            eigen_matrix, eigen_values = spk.jacobi(list_of_vectors, number_of_vectors)
+            print_matrix([eigen_values] + eigen_matrix)
+    except Exception:
+        print(ERROR_MSG)
+        exit(1)
 
 
 # validates the users input (amount of arguments, receiving int when needed) and assigns it to its character
@@ -80,8 +84,8 @@ def choose_random_centrals(list_of_vectors, k):
 
 #
 def print_matrix(matrix):
-    for central in matrix:
-        print(*[f"{neg_zero(x):.4f}" for x in central], sep=COMMA)
+    for row in matrix:
+        print(*[f"{neg_zero(x):.4f}" for x in row], sep=COMMA)
 
 
 def neg_zero(x):
