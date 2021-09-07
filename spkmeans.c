@@ -11,7 +11,7 @@
 #define MAX_DATAPOINTS 50
 #define END_OF_STRING '\0'
 #define PRINT_FORMAT "%.4f"
-#define ERROR_MSG "An Error Has Occurred\n"
+#define ERROR_MSG "An Error Has Occured\n"
 #define INVALID_INPUT_MSG "Invalid Input!\n"
 
 #define MyAssert(exp) \
@@ -243,7 +243,7 @@ int eigengapHeuristicKCalc(Eigenvalue *eigenvalues, int n) {
 }
 
 /**********************************
-******** Memory Allocation ******
+******** Memory Allocation ********
 **********************************/
 
 void *myAlloc(void *effectiveUsedMem, size_t size) {
@@ -411,7 +411,7 @@ void assignVectorsToClusters(double **vectorsArray, Cluster *clustersArray, doub
     for (i = 0; i < numOfVectors; ++i) {
         vec = vectorsArray[i];
         myCluster = findMyCluster(vec, clustersArray, k, dimension);
-        vecToClusterLabeling[i] = (double)myCluster; /* Set vector's cluster to his closest */
+        vecToClusterLabeling[i] = myCluster; /* Set vector's cluster to his closest */
         for (j = 0; j < dimension; ++j) {
             clustersArray[myCluster].currCentroid[j] += vec[j]; /* Summation of the vectors Components */
         }
