@@ -640,7 +640,7 @@ Eigenvalue *sortEigenvalues(double **a, int n) {
     return eigenvalues;
 }
 
-/* Compare function for eigenvalue qsort
+/* Comperator for eigenvalue qsort
  * first compares value size and then by who came first to stay stable
  * */
 int cmpEigenvalues (const void *p1, const void *p2) {
