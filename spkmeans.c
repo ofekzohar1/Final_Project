@@ -107,7 +107,10 @@ int main(int argc, char *argv[]) {
 /**********************************
 ******** Spectral Clustering ******
 **********************************/
-
+/*
+ * The function runs other functions depended on the goal to build the right matrix needed
+ * The function returns the relevant matrix depended on the GOAL
+ * */
 double **dataAdjustmentMatrices(double **datapointsArray, GOAL goal, int *k, int dimension, int numOfDatapoints) {
     double **tMat, **wMat, **lnormMat, **eigenvectorsMat, **ddgMat;
     GOAL task;
@@ -254,7 +257,9 @@ int eigengapHeuristicKCalc(Eigenvalue *eigenvalues, int n) {
 /**********************************
 ******** Memory Allocation ********
 **********************************/
-
+/*The function allocates memory for any dynamic memory needed
+ *The function recycles unused memory and returns a pointer to the needed memory
+ * */
 void *myAlloc(void *effectiveUsedMem, size_t size) {
     void *usedMem = effectiveUsedMem != NULL ? (void *)((char *)effectiveUsedMem - SIZE_OF_VOID_2PTR * 2) : NULL;
     void *blockMem, **blockMemPlusPtr = (void **)realloc(usedMem, size + SIZE_OF_VOID_2PTR * 2);
@@ -284,7 +289,9 @@ void *myAlloc(void *effectiveUsedMem, size_t size) {
     }
     return blockMem;
 }
-
+/*The function builds a 2 dimension array
+ * The function allocates dynamic memory using myallocate function
+ * */
 void **alloc2DArray(int rows, int cols, size_t basicSize, size_t basicPtrSize, void *recycleMemBlock) {
     int i;
     void *blockMem, **matrix;
@@ -330,7 +337,10 @@ void freeAllMemory() {
 /**********************************
 ******** Printing results *********
 **********************************/
-
+/*
+ * The function prints any 2D matrix
+ * Using NegZero to avoid -0.0000
+ * */
 void printMatrix(double **matrix, int rows, int cols) {
     int i, j;
     double value;
@@ -346,7 +356,11 @@ void printMatrix(double **matrix, int rows, int cols) {
         printf("\n");
     }
 }
-
+/*
+ * The function prints the jacobi goal solutions
+ * Includes both the eigenvalues as an array and the eigenvectors as a 2D array
+ * Using NegZero to avoid -0.0000
+ * */
 void printJacobi(double **a, double **v, int n) {
     int i;
     double value;
@@ -365,6 +379,12 @@ void printJacobi(double **a, double **v, int n) {
 /*************************************
 *********** kMeans Algorithm *********
 *************************************/
+
+/*
+ * The Kmeans function receives the data points, number of vectors, dimension, first central indexes and maxIter
+ * The first central indexes is suited for Kmeans and Kmeans++ and is reflected when calling the iniClusters
+ * The function returns the final centroids and each vectors current cluster
+ * */
 
 double **kMeans(double **vectorsArray, int numOfVectors, int dimension, int k, const int *firstCentralIndexes, int maxIter) {
     int i, changes;
@@ -388,7 +408,11 @@ double **kMeans(double **vectorsArray, int numOfVectors, int dimension, int k, c
     MyFree(clustersArray);
     return finalCentroidsAndVecLabeling;
 }
-
+/*
+ * The function prints any 2D matrix
+ * The function returns the initial clusters
+ * The function will initiate the clusters for Kmeans++ when has first central indexes param
+ * */
 Cluster *initClusters(double **vectorsArray, int k, int dimension, const int *firstCentralIndexes) {
     int i, j;
     Cluster *clustersArray;
@@ -417,7 +441,9 @@ Cluster *initClusters(double **vectorsArray, int k, int dimension, const int *fi
     }
     return clustersArray;
 }
-
+/*The function assigns each vector to his current centroid
+ *When the function is over the cluster curr central is the sum of all the vectors assign to it
+ * */
 void assignVectorsToClusters(double **vectorsArray, Cluster *clustersArray, double *vecToClusterLabeling, int k, int numOfVectors, int dimension) {
     int i, j, myCluster;
     double *vec;
@@ -431,7 +457,9 @@ void assignVectorsToClusters(double **vectorsArray, Cluster *clustersArray, doub
         clustersArray[myCluster].counter++; /* Count the number of vectors for each cluster */
     }
 }
-
+/* The function finds the centroid for each vector
+ * Returns the centroid number from the centroid array
+ * */
 int findMyCluster(double *vec, Cluster *clustersArray, int k, int dimension) {
     int myCluster, j;
     double minNorm, norm;
@@ -447,7 +475,8 @@ int findMyCluster(double *vec, Cluster *clustersArray, int k, int dimension) {
     }
     return myCluster;
 }
-
+/*Calculates and returns 2 vectors norm without sqrt
+ * */
 double vectorsNorm(const double *vec1, const double *vec2, int dimension) {
     double norm = 0;
     int i;
@@ -456,7 +485,10 @@ double vectorsNorm(const double *vec1, const double *vec2, int dimension) {
     }
     return norm;
 }
-
+/*The function recalculates the centroides after assigning all the vectors to their clusters in the current round
+ * Current centroid in the start = sum of all the vectors who are assigned to him
+ * The function uses the counter for each centroid and the Current centroid
+ * */
 int recalcCentroids(Cluster *clustersArray, int k, int dimension) {
     int i, j, changes = 0;
     Cluster cluster;
@@ -470,7 +502,7 @@ int recalcCentroids(Cluster *clustersArray, int k, int dimension) {
     }
     return changes;
 }
-
+/*Updating the cluster prevCentroid and resets both counter and currCentroid*/
 void initCurrCentroidAndCounter(Cluster *clustersArray, int k, int dimension) {
     int i, j;
     for (i = 0; i < k; ++i) {
@@ -481,7 +513,7 @@ void initCurrCentroidAndCounter(Cluster *clustersArray, int k, int dimension) {
         clustersArray[i].counter = 0; /* Reset counter */
     }
 }
-
+/*Builds a matrix from the updated centroids after Kmeans iteration is done*/
 double **buildFinalCentroidsMat(Cluster *clustersArray, double *vecToClusterLabeling, int k, int dimension) {
     double **matrix = (double **)(clustersArray[k - 1].prevCentroid + dimension * 3);
     matrix[k] = vecToClusterLabeling;
@@ -511,6 +543,7 @@ double **jacobiAlgorithm(double **matrix, int n) {
     return eigenvectorsMat;
 }
 
+/*Jacobi rotate algorithm as mentioned in the task*/
 double jacobiRotate(double **a, double **v, int n, int i, int j) {
     double theta, t, c, s;
     double ij, ii, jj, ir, jr;
@@ -554,7 +587,8 @@ double jacobiRotate(double **a, double **v, int n, int i, int j) {
 
     return 2 * SQ(ij); /* offNormDiff: Off(A)^2 - Off(A')^2 = 2 * Aij^2 */
 }
-
+/* Returns the row&col of the off-diagonal element with the largest absolute value
+ * The pivot is used in the jacobi rotation*/
 void pivotIndex(double **matrix, int n, int *pivotRow, int *pivotCol) {
     int i, j;
     double maxAbs = -1, tempValue;
@@ -572,6 +606,7 @@ void pivotIndex(double **matrix, int n, int *pivotRow, int *pivotCol) {
         *pivotRow = EOF; /* Matrix is diagonal */
 }
 
+/*Builds the identity matrix */
 double **initIdentityMatrix(int n) {
     int i, j;
     double **matrix = (double **) alloc2DArray(n, n, sizeof(double), sizeof(double *), freeUsedMem);
@@ -586,6 +621,10 @@ double **initIdentityMatrix(int n) {
     return matrix;
 }
 
+/*
+ * Sorting eigenvalues using the qsort and comperatror
+ * Returns the Eigenvalues sorted
+ * */
 Eigenvalue *sortEigenvalues(double **a, int n) {
     int i;
     Eigenvalue *eigenvalues = myAlloc(NULL, n * sizeof(Eigenvalue));
@@ -601,6 +640,9 @@ Eigenvalue *sortEigenvalues(double **a, int n) {
     return eigenvalues;
 }
 
+/* Compare function for eigenvalue qsort
+ * first compares value size and then by who came first to stay stable
+ * */
 int cmpEigenvalues (const void *p1, const void *p2) {
     const Eigenvalue *q1 = p1, *q2 = p2;
 
@@ -614,7 +656,9 @@ int cmpEigenvalues (const void *p1, const void *p2) {
 /*************************************
 ********* Auxiliary Functions ********
 *************************************/
-
+/* Validates the amount of arguments, the goal, the file and the k when is relevant
+ * After the validation is succeeded the function will assign the input to their variables
+ * */
 void validateAndAssignInput(int argc, char **argv, int *k, GOAL *goal, char **filenamePtr) {
     char *nextCh;
 
@@ -636,7 +680,7 @@ void validateAndAssignInput(int argc, char **argv, int *k, GOAL *goal, char **fi
     printf(INVALID_INPUT_MSG);
     exit(0);
 }
-
+/* Transforms string to enum*/
 GOAL str2enum(char *str) {
     int j;
     /* Str to lowercase */
@@ -651,7 +695,10 @@ GOAL str2enum(char *str) {
     return NUM_OF_GOALS; /* Invalid str to enum convert */
 }
 
-
+/*
+ * Builds a 2D datapoint matrix from the file received
+ * The function chooses the size of the matrix (n*n or n*dimension) depended on the jacobi or the rest
+ * */
 double **readDataFromFile(int *rows, int *cols, char *fileName, GOAL goal) {
     int counter, maxLen;
     char c;
@@ -682,7 +729,7 @@ double **readDataFromFile(int *rows, int *cols, char *fileName, GOAL goal) {
     MyAssert(matrix != NULL);
     return matrix;
 }
-
+/*Calculates vector/datapoint dimension*/
 void calcDim(int *dimension, FILE *file, double *firstLine) {
     char c;
     double value;

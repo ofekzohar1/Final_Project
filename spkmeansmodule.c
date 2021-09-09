@@ -94,7 +94,11 @@ static PyObject *calc_mat_connect(PyObject *self, PyObject *args) {
     freeAllMemory();
     return pyResult;
 }
-
+/*
+* This connects the kMeans function using a wrapper C API function
+* The wrapping function needs a PyObject* self argument.
+* It has input PyObject *args from Python.
+*/
 static PyObject *kmeans_connect(PyObject *self, PyObject *args) {
     PyObject *pyListOfLists, *pyResult, *pyListOfIndexes;
     int k, dimension, numOfDatapoints, *firstCentralIndexes;
