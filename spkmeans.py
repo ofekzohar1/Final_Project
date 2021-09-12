@@ -20,7 +20,7 @@ def main():
     list_of_vectors = build_vectors_list(file)
     n_vectors = len(list_of_vectors)
     n_features = len(list_of_vectors[0])
-    if k >= n_vectors:
+    if k >= n_vectors and goal == "spk":
         print(INVALID_INPUT_MSG)
         exit()  # End program k >= n
 
