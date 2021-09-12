@@ -6,14 +6,18 @@
 /*******************************************************************************
 ********************************* Macros ***************************************
 *******************************************************************************/
-#define MyAssert(exp)   \
-if (!(exp)) {           \
+/* Custom logical assert macro - free memory and return NULL (error in python) */
+#define MyAssert(exp) \
+if (!(exp)) {         \
 freeAllMemory();        \
-if (!PyErr_Occurred())  \
-/* If none exception reported, raise memory exception */                   \
-    PyErr_NoMemory();   \
+if (!PyErr_Occurred()) { PyErr_NoMemory(); }  \
+/* If none exception reported, raise memory exception */  \
 return NULL;            \
 }
+
+/* Custom typeErr raising */
+#define MyPy_TypeErr(x, y) \
+PyErr_Format(PyExc_TypeError, "%s type is required (got type %s)", x ,Py_TYPE(y)->tp_name)
 
 /*******************************************************************************
 **************************** Functions Declaration *****************************

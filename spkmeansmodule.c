@@ -85,6 +85,7 @@ static PyObject *calc_mat_connect(PyObject *self, PyObject *args) {
         cols = numOfDatapoints; /* Otherwise - N x N */
     /* Convert result back to python type List of lists */
     pyResult = cMatToPyLOL(calcMat, numOfDatapoints, cols);
+    MyAssert(pyResult != NULL);
 
     freeAllMemory();
     return pyResult;
@@ -111,6 +112,7 @@ static PyObject *kmeans_connect(PyObject *self, PyObject *args) {
     MyAssert(calcMat != NULL);
     /* Convert result back to python type - tuple (LOL, List) */
     pyResult = kmeansResToPyObject(calcMat, k, dimension, numOfDatapoints);
+    MyAssert(pyResult != NULL);
 
     freeAllMemory();
     return pyResult;
@@ -138,6 +140,7 @@ static PyObject *jacobi_connect(PyObject *self, PyObject *args) {
     }
     /* Convert result back to python type - tuple (LOL, List) */
     pyResult = jacobiResToPyObject(eigenvectorsMat, matrix[0], n);
+    MyAssert(pyResult != NULL);
 
     freeAllMemory();
     return pyResult;
@@ -151,11 +154,17 @@ static PyObject *jacobi_connect(PyObject *self, PyObject *args) {
 int *pyIntListToCArray(PyObject *pyIntList, int len) {
     Py_ssize_t i;
     int *array, value;
+    PyObject *pyValue;
 
+    if (!PyList_Check(pyIntList)) { /* Not a list */
+        MyPy_TypeErr("list", pyIntList);
+        return NULL;
+    }
     array = (int *) myAlloc(freeUsedMem, len * sizeof(int));
     if (array != NULL) { /* Memory allocation fail */
         for (i = 0; i < len; ++i) {
-            value = (int) PyLong_AsLong(PyList_GetItem(pyIntList, i));
+            pyValue = PyList_GetItem(pyIntList, i);
+            value = (int) (pyValue != NULL ? PyLong_AsLong(pyValue) : EOF);
             if (PyErr_Occurred()) {
                 return NULL; /* Casting error to int */
             }
@@ -189,17 +198,27 @@ double **pyLOLToCMat(PyObject *pyListOfLists, int rows, int cols) {
     double **matrix, value;
     PyObject *pyList, *pyValue;
 
-    MyAssert(PyList_Check(pyListOfLists)); /* Is a list */
+    if (!PyList_Check(pyListOfLists)) { /* Not a list */
+        MyPy_TypeErr("list", pyListOfLists);
+        return NULL;
+    }
     /* Allocate memory for matrix */
-    matrix = (double **) alloc2DArray(rows, cols, sizeof(double), sizeof(double *), freeUsedMem);
+    matrix = (double **) alloc2DArray(rows, cols, sizeof(double), sizeof(double *),
+                                      freeUsedMem);
     if (matrix != NULL) { /* Memory allocation fail */
         for (i = 0; i < rows; ++i) {
             pyList = PyList_GetItem(pyListOfLists, i);
-            MyAssert(PyList_Check(pyList)); /* Is a list */
+            if (PyErr_Occurred()) /* Check for an error */
+                return NULL;
+            if (!PyList_Check(pyList)) { /* Not a list */
+                MyPy_TypeErr("list", pyList);
+                return NULL;
+            }
             for (j = 0; j < cols; ++j) {
                 pyValue = PyList_GetItem(pyList, j);
-                value = PyFloat_AsDouble(pyValue);
-                MyAssert(!PyErr_Occurred()); /* Check for an error */
+                value = pyValue != NULL ? PyFloat_AsDouble(pyValue) : EOF;
+                if (PyErr_Occurred()) /* Check for an error */
+                    return NULL;
                 matrix[i][j] = value;
             }
         }
@@ -211,6 +230,7 @@ double **pyLOLToCMat(PyObject *pyListOfLists, int rows, int cols) {
 PyObject *cMatToPyLOL(double **matrix, int rows, int cols) {
     Py_ssize_t i, j;
     PyObject *pyLOL, *pyList, *pyValue;
+
     pyLOL = PyList_New(rows);
     if(pyLOL != NULL) { /* Memory allocation fail */
         for (i = 0; i < rows; ++i) {
