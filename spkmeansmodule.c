@@ -30,7 +30,7 @@ static PyMethodDef method[] = {
 /* This initiates the module using the above definitions. */
 static struct PyModuleDef moduledef = {
         PyModuleDef_HEAD_INIT,
-        "spkmeans", /* name of module */
+        "spkmeansmodule", /* name of module */
         NULL, /* module documentation, may be NULL */
         -1,  /* size of per-interpreter state of the module,
                     * or -1 if the module keeps state in global variables. */
@@ -45,7 +45,7 @@ static struct PyModuleDef moduledef = {
  * This should be the only non-static item defined in the module file
  */
 PyMODINIT_FUNC
-PyInit_spkmeans(void) {
+PyInit_spkmeansmodule(void) {
     return PyModule_Create(&moduledef);
 }
 

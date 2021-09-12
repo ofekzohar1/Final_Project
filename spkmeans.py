@@ -1,7 +1,7 @@
 # Imports
 import sys
 import numpy as np
-import spkmeans as spk
+import spkmeansmodule as spk
 
 # Constants
 MIN_ARGUMENTS = 3
@@ -9,7 +9,7 @@ INVALID_INPUT_MSG = "Invalid Input!"
 ERROR_MSG = "An Error Has Occured"
 COMMA = ','
 NEG_ZERO_LOWER_BOUND = -0.00005
-GOALS = ["spk", "jacobi", "wam", "ddg", "lnorm"]
+GOALS = ["jacobi", "wam", "ddg", "lnorm", "spk"]
 
 
 # The main algorithm - Spectral clustering.
@@ -98,7 +98,7 @@ def print_matrix(matrix):
 
 # Print format -0.0000 into 0.0000 present
 # x - A float number
-# return: -x if in required range
+# return: -x if in required range, x else
 def neg_zero(x):
     if NEG_ZERO_LOWER_BOUND < x < 0:
         return -x
