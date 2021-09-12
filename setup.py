@@ -5,6 +5,6 @@ setup(
     name='spkmeans',
     version='1.1',
     author='Ben_&_Ofek',
-    description='Spectral clustering module',
+    description='Spectral Clustering module',
     ext_modules=[module]
 )

@@ -1,7 +1,11 @@
 #ifndef FINAL_PROJECT_SPKMEANSMODULE_H
 #define FINAL_PROJECT_SPKMEANSMODULE_H
+/* This header contains macros, constants and functions used to link between
+ * C to python */
 
-/* Macros */
+/*******************************************************************************
+********************************* Macros ***************************************
+*******************************************************************************/
 #define MyAssert(exp)   \
 if (!(exp)) {           \
 freeAllMemory();        \
@@ -11,9 +15,9 @@ if (!PyErr_Occurred())  \
 return NULL;            \
 }
 
-/**********************************
-****** Functions Declaration ******
-**********************************/
+/*******************************************************************************
+**************************** Functions Declaration *****************************
+*******************************************************************************/
 
 /** The C-function that implements the Python function calc_mat.
  * Gets vectors list as matrix and return matrix calculated according to the

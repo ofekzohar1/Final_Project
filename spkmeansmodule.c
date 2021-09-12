@@ -1,7 +1,7 @@
 #define PY_SSIZE_T_CLEAN
 #include <Python.h>
 #include "spkmeansmodule.h" /* Macros and functions declarations */
-#include "spkmeans.h" /* spk's public functions and macros */
+#include "spkmeans.h" /* spk's public interface functions and macros */
 
 /**********************************
 ********* Module settings *********

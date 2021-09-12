@@ -58,7 +58,7 @@ def validate_and_assign_input_user():
     return k, goal, file
 
 
-# The function read from csv format file (extansion .txt/.csv) into matrix.
+# The function read from csv format file (extension .txt/.csv) into matrix.
 # file - the csv filename/filepath
 # return: Reading result as list of lists (matrix)
 def build_vectors_list(file):
@@ -90,7 +90,7 @@ def choose_random_centrals(list_of_vectors, k):
     return list_rand_init_centrals_indexes
 
 
-# Prints matrix in csv format where floats formatted to 4 digits after the decimal point
+# Print matrix in csv format where floats formatted to 4 digits after the decimal point
 def print_matrix(matrix):
     for row in matrix:
         print(*[f"{neg_zero(x):.4f}" for x in row], sep=COMMA)
